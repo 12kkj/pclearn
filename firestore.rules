@@ -1,0 +1,42 @@
+// Firestore Security Rules for Computer Skills Academy
+// Copy-paste these into Firebase Console → Firestore → Rules
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Explicitly allowed student IDs
+    function isValidStudentId(studentId) {
+      return studentId == "st_1" || studentId == "st_2";
+    }
+
+    // Exact email required for each student — no wildcards
+    function requiredEmail(studentId) {
+      return studentId == "st_1"
+        ? "student1@learnpc.app"
+        : "student2@learnpc.app";
+    }
+
+    // The authenticated user must own this exact student record
+    function isOwner(studentId) {
+      return request.auth != null
+        && isValidStudentId(studentId)
+        && request.auth.token.email == requiredEmail(studentId);
+    }
+
+    // Block all access by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Main student state document — only the student who owns it
+    match /students/{studentId} {
+      allow read, write: if isOwner(studentId);
+
+      // Per-day lesson cache sub-collection
+      match /cache/{day} {
+        allow read, write: if isOwner(studentId);
+      }
+    }
+  }
+}

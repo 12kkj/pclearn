@@ -1,0 +1,19 @@
+node_modules/
+.next/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Copilot / editor artifacts
+.local/
+.vscode/
+*.code-workspace
+
+# Replit / agent config
+.agents/
+.config/
+.replit
+replit.nix
+replit.md

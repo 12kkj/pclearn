@@ -1,0 +1,6 @@
+{
+  "name": "Computer Skills Academy",
+  "description": "An interactive personal AI mentor and state-machine tutor that teaches programming, hardware, and computer fundamentals from absolute zero to B.Tech ECE and Class 12 CS levels.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
