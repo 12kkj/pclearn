@@ -17,7 +17,8 @@ service cloud.firestore {
     // from the admin panel. In production you'd restrict writes to an
     // admin SDK or Cloud Function, but for now open writes keep the
     // admin → Firestore → student sync working.
-    match /curriculum {
+    // Path: curriculum/data (collection/document pair)
+    match /curriculum/{docId} {
       allow read: if true;
       allow write: if true;
     }

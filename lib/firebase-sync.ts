@@ -337,10 +337,12 @@ export function mergeStates(
 // ══════════════════════════════════════════════════════════════════════════
 // Curriculum Sync — pushes admin content to Firestore for all students
 // Firestore structure:
-//   curriculum (single doc) → { phases: [...], days: { "0": {...}, "1": {...} } }
+//   curriculum/data (single doc) → { phases: [...], days: { "0": {...}, "1": {...} } }
 // ══════════════════════════════════════════════════════════════════════════
 
-const CURRICULUM_DOC = "curriculum";
+// Use collection/document pair — Firestore requires even number of segments
+const CURRICULUM_COLLECTION = "curriculum";
+const CURRICULUM_DOC_ID = "data";
 
 /** Firestore REST API config */
 const FIREBASE_PROJECT_ID = "learnpc-4fd7b";
@@ -352,7 +354,7 @@ const FIREBASE_API_KEY = "AIzaSyDmuwSnhEatNWKPwLQFOUCNK6Z9wvbUp2Y";
  */
 async function pushCurriculumViaREST(data: { phases: any[]; days: Record<string, any> }): Promise<boolean> {
   try {
-    const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${CURRICULUM_DOC}?key=${FIREBASE_API_KEY}`;
+    const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${CURRICULUM_COLLECTION}/${CURRICULUM_DOC_ID}?key=${FIREBASE_API_KEY}`;
     const body = {
       fields: {
         phases: { arrayValue: { values: (data.phases ?? []).map((p: any) => ({ stringValue: JSON.stringify(p) })) } },
@@ -411,7 +413,7 @@ export async function syncCurriculumToFirestore(
       }
     }
     const db = getFirebaseDb();
-    const ref = doc(db, CURRICULUM_DOC);
+    const ref = doc(db, CURRICULUM_COLLECTION, CURRICULUM_DOC_ID);
     await setDoc(ref, {
       phases: state.phases ?? [],
       days: state.days ?? {},
@@ -433,7 +435,7 @@ export async function loadCurriculumFromFirestore(): Promise<{
 } | null> {
   try {
     const db = getFirebaseDb();
-    const ref = doc(db, CURRICULUM_DOC);
+    const ref = doc(db, CURRICULUM_COLLECTION, CURRICULUM_DOC_ID);
     const snap = await getDoc(ref);
     if (!snap.exists()) return null;
 
@@ -460,7 +462,7 @@ export async function loadCurriculumFromFirestore(): Promise<{
 export async function deleteCurriculumFromFirestore(): Promise<void> {
   try {
     const db = getFirebaseDb();
-    const ref = doc(db, CURRICULUM_DOC);
+    const ref = doc(db, CURRICULUM_COLLECTION, CURRICULUM_DOC_ID);
     await deleteDoc(ref);
     console.log("[firebase-sync] Curriculum deleted from Firestore");
   } catch (err) {
