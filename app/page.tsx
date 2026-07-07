@@ -29,6 +29,7 @@ import BookmarkPanel, { type BookmarkItem } from "@/components/student/BookmarkP
 import DailyGoalTracker from "@/components/student/DailyGoalTracker";
 import OnboardingFlow from "@/components/student/OnboardingFlow";
 import DayLinkView from "@/components/student/DayLinkView";
+import PeriodicTest from "@/components/student/PeriodicTest";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ResourceSection {
@@ -1638,7 +1639,7 @@ function QuizPanel({ quiz, answers, evalResult, onAnswer, onSubmit, onNextLesson
 }
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
-type Tab = "home" | "lesson" | "chat" | "roadmap";
+type Tab = "home" | "lesson" | "chat" | "roadmap" | "tests";
 type StudentView = "dashboard" | "achievements" | "learning-path" | "bookmarks" | "smart-review";
 
 export default function Home() {
@@ -2242,6 +2243,7 @@ export default function Home() {
     { id: "home", label: "Home", icon: <HomeIcon size={17} /> },
     { id: "lesson", label: "Day", icon: <BookOpen size={17} />, dot: !!currentLesson },
     { id: "chat", label: "AI Chat", icon: <MessageSquare size={17} />, disabled: quizInProgress },
+    { id: "tests", label: "Tests", icon: <Target size={17} /> },
     { id: "roadmap", label: "Journey", icon: <Map size={17} /> },
   ];
 
@@ -2651,6 +2653,21 @@ export default function Home() {
               onModelChange={setPreferredChatModel} isLoading={chatLoading}
             />
           </div>
+        )}
+
+        {/* TESTS */}
+        {activeTab === "tests" && (
+          <PeriodicTest
+            completedDays={learner.completedDays}
+            currentDay={learner.currentDay}
+            testScores={learner.testScores}
+            onAskAi={(prompt) => {
+              setActiveTab("chat");
+              setTimeout(() => {
+                handleSendChat(prompt, MODEL_ASSIGNMENTS.chat);
+              }, 200);
+            }}
+          />
         )}
 
         {/* ROADMAP */}
