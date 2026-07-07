@@ -889,60 +889,8 @@ function HomeTab({
   const nextDay = isNew ? 1 : (learner.currentDay + 1 <= 100 ? learner.currentDay + 1 : 100);
   const currentMeta = getLessonByDay(learner.currentDay || 1);
   const phase = getPhaseForDay(learner.currentDay || 1);
-  const phaseDays = phase ? getLessonsInPhase(phase.id) : [];
-  const phaseCompleted = phaseDays.filter(d => (learner.completedDays ?? []).includes(d.day)).length;
-  const phasePct = phaseDays.length > 0 ? Math.round((phaseCompleted / phaseDays.length) * 100) : 0;
   const overallPct = Math.round(((learner.completedDays ?? []).length / 100) * 100);
-
-  const [todayTip, setTodayTip] = React.useState(HOME_TIPS[0]);
-  const [showOnboarding, setShowOnboarding] = React.useState(false);
-
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const seenOnboarding = window.localStorage.getItem("csa_onboarding_seen");
-    setShowOnboarding(!seenOnboarding);
-
-    const now = new Date();
-    const nowTs = now.getTime();
-    const storedTs = Number(window.localStorage.getItem("csa_home_tip_ts") || "0");
-    const storedTip = window.localStorage.getItem("csa_home_tip");
-
-    const refreshWindowMs = 20 * 60 * 60 * 1000;
-    const shouldRefresh = !storedTip || nowTs - storedTs >= refreshWindowMs;
-
-    if (!shouldRefresh && storedTip) {
-      setTodayTip(storedTip);
-      return;
-    }
-
-    const hash = nowTs + Array.from(now.toISOString()).reduce((acc, char) => acc + char.charCodeAt(0), 0);
-    const nextTip = HOME_TIPS[Math.abs(hash) % HOME_TIPS.length];
-    setTodayTip(nextTip);
-    window.localStorage.setItem("csa_home_tip_ts", String(nowTs));
-    window.localStorage.setItem("csa_home_tip", nextTip);
-  }, []);
-
-  const PHASE_COLORS = ["#6366f1","#8b5cf6","#ec4899","#06b6d4","#10b981","#f59e0b","#ef4444","#14b8a6","#3b82f6","#a855f7"];
-  const phaseColor = PHASE_COLORS[(phase?.id ?? 1) - 1] ?? "#6366f1";
-  const recommendedDay = learner.currentDay > 0 ? Math.min(learner.currentDay, 100) : 1;
-  const recommendedLesson = getLessonByDay(recommendedDay);
-  const weeklyCompleted = (learner.completedDays ?? []).filter((day) => day >= Math.max(1, recommendedDay - 6)).length;
-  const quizScores = Object.values(learner.testScores ?? {}).filter((score) => Number(score) > 0);
-  const quizAccuracy = quizScores.length > 0
-    ? Math.round((quizScores.reduce((sum, score) => sum + Number(score), 0) / (quizScores.length * 5)) * 100)
-    : 0;
-  const streakGoal = Math.min(100, learner.streak);
-  const weeklyGoal = Math.min(100, weeklyCompleted * 100 / 3);
-  const milestoneGoal = Math.min(100, learner.completedDays.length * 100 / 10);
-  const nextFocusTopic = learner.weakTopics[0] || currentMeta?.topics?.[0] || "computer fundamentals";
-
-  const handleDismissOnboarding = () => {
-    setShowOnboarding(false);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem("csa_onboarding_seen", "true");
-    }
-  };
+  const phaseColor = ["#6366f1","#8b5cf6","#ec4899","#06b6d4","#10b981","#f59e0b","#ef4444","#14b8a6","#3b82f6","#a855f7"][(phase?.id ?? 1) - 1] ?? "#6366f1";
 
   if (!hydrated) {
     return (
@@ -953,371 +901,180 @@ function HomeTab({
   }
 
   return (
-    <div className="fade-up home-shell app-shell">
+    <div style={{ padding: "16px", maxWidth: 600, margin: "0 auto", display: "flex", flexDirection: "column", gap: 16 }}>
 
-      {/* Welcome + CTA */}
-      <div className="card hero-card" style={{
+      {/* ── Hero: Day + Progress ── */}
+      <div className="card" style={{
         background: `linear-gradient(135deg, var(--brand) 0%, var(--brand2) 100%)`,
-        color: "#fff",
+        color: "#fff", padding: "20px",
       }}>
-        <div className="hero-card-content">
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12 }}>
           <div style={{ flex: 1 }}>
-            <p style={{ fontSize: "0.78rem", fontWeight: 600, opacity: 0.85, marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>
-              {isNew ? "New Journey Begins!" : `Welcome back, ${learner.name}! 👋`}
+            <p style={{ fontSize: "0.72rem", fontWeight: 600, opacity: 0.8, textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 4 }}>
+              {isNew ? "Welcome!" : `Day ${learner.currentDay}`}
             </p>
-            <h2 style={{ fontSize: "1.3rem", fontWeight: 800, lineHeight: 1.25, marginBottom: 8 }}>
-              {isNew
-                ? "Start from Day 1 🚀"
-                : `Day ${learner.currentDay} ${currentMeta ? `— ${currentMeta.title}` : ""}`}
+            <h2 style={{ fontSize: "1.2rem", fontWeight: 800, lineHeight: 1.25, marginBottom: 6 }}>
+              {isNew ? "Start your journey 🚀" : (currentMeta?.title || `Day ${learner.currentDay}`)}
             </h2>
-            <p style={{ fontSize: "0.83rem", opacity: 0.82, lineHeight: 1.5, marginBottom: 16 }}>
-              {isNew
-                ? "Completely new to computers? No worries — we'll teach you from zero!"
-                : `${learner.completedDays.length}/100 days complete • ${overallPct}% journey done`}
+            <p style={{ fontSize: "0.8rem", opacity: 0.8, lineHeight: 1.4 }}>
+              {isNew ? "100 days to go from zero to confident" : `${learner.completedDays.length}/100 days • ${overallPct}% complete`}
             </p>
-
-            <div className="hero-card-actions">
-              {isNew ? (
-                <button
-                  className="btn-primary"
-                  onClick={() => onStartDay(1)}
-                  disabled={isStreaming}
-                  style={{ background: "#fff", color: "var(--brand)", boxShadow: "0 4px 14px rgba(0,0,0,0.2)" }}
-                >
-                  {isStreaming ? <><Loader2 size={15} className="animate-spin" /> Loading…</> : <><Play size={15} /> Start Day 1!</>}
-                </button>
-              ) : (
-                <>
-                  {hasLesson && (
-                    <button
-                      onClick={onContinueLesson}
-                      style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 18px", background: "#fff", color: "var(--brand)", borderRadius: 10, fontSize: "0.875rem", fontWeight: 700, border: "none", cursor: "pointer", boxShadow: "0 4px 14px rgba(0,0,0,0.2)" }}
-                    >
-                      <BookOpen size={14} /> Lesson Continue
-                    </button>
-                  )}
-                  <button
-                    onClick={onGoQuiz}
-                    style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 18px", background: "rgba(255,255,255,0.15)", color: "#fff", borderRadius: 10, fontSize: "0.875rem", fontWeight: 700, border: "2px solid rgba(255,255,255,0.4)", cursor: "pointer", backdropFilter: "blur(4px)" }}
-                  >
-                    <Target size={14} /> Take Quiz
-                  </button>
-                  {!hasLesson && !isStreaming && (
-                    <button
-                      onClick={() => onStartDay(learner.currentDay || 1)}
-                      disabled={isStreaming}
-                      style={{ display: "flex", alignItems: "center", gap: 7, padding: "10px 18px", background: "rgba(255,255,255,0.15)", color: "#fff", borderRadius: 10, fontSize: "0.875rem", fontWeight: 700, border: "2px solid rgba(255,255,255,0.4)", cursor: "pointer" }}
-                    >
-                      <Play size={14} /> Load Lesson
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
           </div>
-
-          {/* XP circle */}
-          <div className="hero-card-metric">
-            <div style={{
-              width: 72, height: 72, borderRadius: "50%",
-              background: "rgba(255,255,255,0.15)", border: "3px solid rgba(255,255,255,0.35)",
-              display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-            }}>
-              <span style={{ fontSize: "1.2rem", fontWeight: 800, lineHeight: 1 }}>{overallPct}</span>
-              <span style={{ fontSize: "0.6rem", opacity: 0.8, fontWeight: 600 }}>% done</span>
-            </div>
+          {/* Progress ring */}
+          <div style={{
+            width: 60, height: 60, borderRadius: "50%", flexShrink: 0,
+            background: "rgba(255,255,255,0.15)", border: "3px solid rgba(255,255,255,0.35)",
+            display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          }}>
+            <span style={{ fontSize: "1.1rem", fontWeight: 800, lineHeight: 1 }}>{overallPct}</span>
+            <span style={{ fontSize: "0.55rem", opacity: 0.8 }}>%</span>
           </div>
         </div>
-
-        {/* Overall progress bar */}
-        <div style={{ marginTop: 16 }} className="hero-card-progress">
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.72rem", opacity: 0.85, marginBottom: 6 }}>
-            <span>{learner.completedDays.length} days complete</span>
-            <span>{100 - learner.completedDays.length} days remaining</span>
-          </div>
-          <div style={{ height: 6, background: "rgba(255,255,255,0.2)", borderRadius: 99 }}>
+        {/* Progress bar */}
+        <div style={{ marginTop: 14 }}>
+          <div style={{ height: 5, background: "rgba(255,255,255,0.2)", borderRadius: 99 }}>
             <div style={{ height: "100%", width: `${overallPct}%`, background: "#fff", borderRadius: 99, transition: "width 0.6s" }} />
           </div>
         </div>
+        {/* CTA buttons */}
+        <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+          {isNew ? (
+            <button
+              onClick={() => onStartDay(1)} disabled={isStreaming}
+              style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 16px", background: "#fff", color: "var(--brand)", borderRadius: 10, fontSize: "0.85rem", fontWeight: 700, border: "none", cursor: "pointer" }}
+            >
+              {isStreaming ? <Loader2 size={14} className="animate-spin" /> : <Play size={14} />} Start Day 1
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={hasLesson ? onContinueLesson : () => onStartDay(learner.currentDay || 1)}
+                style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 16px", background: "#fff", color: "var(--brand)", borderRadius: 10, fontSize: "0.85rem", fontWeight: 700, border: "none", cursor: "pointer" }}
+              >
+                <BookOpen size={14} /> {hasLesson ? "Continue" : "Start Lesson"}
+              </button>
+              <button
+                onClick={onGoQuiz}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 7, padding: "10px 16px", background: "rgba(255,255,255,0.15)", color: "#fff", borderRadius: 10, fontSize: "0.85rem", fontWeight: 700, border: "2px solid rgba(255,255,255,0.4)", cursor: "pointer" }}
+              >
+                <Target size={14} /> Quiz
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      {showOnboarding && (
-        <div className="card" style={{ padding: "18px 20px", border: "1px solid var(--brand-glow)", background: "linear-gradient(135deg, rgba(99,102,241,0.18), rgba(6,182,212,0.12))" }}>
-          <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--brand2)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 6 }}>Quick start guide</p>
-              <h3 style={{ fontSize: "1rem", fontWeight: 800, color: "var(--text)", marginBottom: 8 }}>Learn one day at a time, and keep moving forward.</h3>
-              <p style={{ fontSize: "0.84rem", color: "var(--text2)", lineHeight: 1.6, marginBottom: 10 }}>
-                Each day gives you a short lesson, useful resources, and a quiz. You must score 100% to unlock the next day, so every lesson matters.
-              </p>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", fontSize: "0.76rem", color: "var(--text-muted)" }}>
-                <span style={{ padding: "4px 8px", borderRadius: 999, background: "rgba(255,255,255,0.16)" }}>✅ Study daily</span>
-                <span style={{ padding: "4px 8px", borderRadius: 999, background: "rgba(255,255,255,0.16)" }}>🧠 Review weak topics</span>
-                <span style={{ padding: "4px 8px", borderRadius: 999, background: "rgba(255,255,255,0.16)" }}>🚀 Build streaks</span>
-              </div>
+      {/* ── Current Phase ── */}
+      {phase && (
+        <div className="card" style={{ padding: "14px 16px", borderLeft: `3px solid ${phaseColor}` }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+            <span style={{ fontSize: "1.3rem" }}>{phase.icon}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>Phase {phase.id}: {phase.name}</p>
+              <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{phase.milestoneProject}</p>
             </div>
-            <button className="btn-secondary" onClick={handleDismissOnboarding} style={{ flexShrink: 0 }}>Got it</button>
+          </div>
+          <div className="progress-track" style={{ height: 6 }}>
+            <div className="progress-fill" style={{ width: `${Math.round(((getLessonsInPhase(phase.id).filter(d => (learner.completedDays ?? []).includes(d.day)).length) / Math.max(1, getLessonsInPhase(phase.id).length)) * 100)}%`, background: phaseColor }} />
           </div>
         </div>
       )}
 
-      {/* Personalized dashboard */}
-      <div className="dashboard-grid">
-        <div className="card" style={{ padding: "16px 18px", minWidth: 0 }}>
-          <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 12 }}>🌟 Personal dashboard</p>
-          <div style={{ display: "grid", gap: 10, minWidth: 0 }}>
-            {[
-              {
-                title: "Continue where you left off",
-                desc: learner.currentDay > 0 ? `Pick up Day ${learner.currentDay}` : "Start your first lesson",
-                action: hasLesson ? "Resume lesson" : "Start lesson",
-                icon: <BookOpen size={14} style={{ color: "var(--brand)" }} />,
-                onClick: onContinueLesson,
-              },
-              {
-                title: "Today's goal",
-                desc: `${overallPct}% complete • ${learner.streak} day streak`,
-                action: "Keep moving",
-                icon: <Target size={14} style={{ color: "var(--amber)" }} />,
-                onClick: onGoQuiz,
-              },
-              {
-                title: "Recommended next lesson",
-                desc: recommendedLesson ? recommendedLesson.title : "Your next lesson is ready",
-                action: "Open next",
-                icon: <Sparkles size={14} style={{ color: "var(--cyan)" }} />,
-                onClick: () => onStartDay(recommendedDay),
-              },
-            ].map((item) => (
-              <button key={item.title} onClick={item.onClick} className="dashboard-card-button">
-                <div className="dashboard-card-button-content">
-                  <div style={{ width: 30, height: 30, borderRadius: 8, background: "rgba(255,255,255,0.06)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>{item.icon}</div>
-                  <div className="dashboard-card-button-text">
-                    <p className="dashboard-card-button-title">{item.title}</p>
-                    <p className="dashboard-card-button-desc">{item.desc}</p>
-                  </div>
-                </div>
-                <ChevronRight size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
-              </button>
-            ))}
+      {/* ── Quick Actions ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+        <button onClick={() => onAskAi("Help me with what I've learned so far. Ask me a question to test my knowledge.")}
+          className="card" style={{ padding: "14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)" }}>
+          <span style={{ fontSize: "1.5rem" }}>🤖</span>
+          <div>
+            <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>Ask AI</p>
+            <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>Get help</p>
           </div>
-        </div>
-
-        <div className="card" style={{ padding: "16px 18px", borderLeft: `3px solid ${phaseColor}`, minWidth: 0 }}>
-          <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>📈 Momentum</p>
-          <div style={{ display: "grid", gap: 8, minWidth: 0 }}>
-            {[
-              { label: "You're done", value: `${overallPct}%`, hint: "of your journey" },
-              { label: "Streak", value: `${learner.streak}d`, hint: "keep it alive" },
-              { label: "Weak topics", value: `${learner.weakTopics.length}`, hint: `${nextFocusTopic} needs attention` },
-            ].map((item) => (
-              <div key={item.label} className="dashboard-metric-row">
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8, marginBottom: 4 }}>
-                  <span className="dashboard-metric-label">{item.label}</span>
-                  <span className="dashboard-metric-value">{item.value}</span>
-                </div>
-                <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", lineHeight: 1.4, overflowWrap: "anywhere" }}>{item.hint}</p>
-              </div>
-            ))}
+        </button>
+        <button onClick={onGoQuiz}
+          className="card" style={{ padding: "14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)" }}>
+          <span style={{ fontSize: "1.5rem" }}>📝</span>
+          <div>
+            <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>Take Quiz</p>
+            <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>Test yourself</p>
           </div>
-        </div>
+        </button>
+        <button onClick={() => onStartDay(nextDay)}
+          className="card" style={{ padding: "14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)" }}>
+          <span style={{ fontSize: "1.5rem" }}>📅</span>
+          <div>
+            <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>Day {nextDay}</p>
+            <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>Next lesson</p>
+          </div>
+        </button>
+        <button onClick={() => onAskAi("Give me 2-3 short summaries of interesting recent tech developments in Indian English.")}
+          className="card" style={{ padding: "14px", textAlign: "left", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, border: "1px solid var(--border)" }}>
+          <span style={{ fontSize: "1.5rem" }}>📰</span>
+          <div>
+            <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>Tech News</p>
+            <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>Stay updated</p>
+          </div>
+        </button>
       </div>
 
-      <div className="dashboard-grid">
-        <div className="card" style={{ padding: "16px 18px" }}>
-          <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>🎯 Study goals</p>
-          <div style={{ display: "grid", gap: 10 }}>
-            {[
-              { label: "7-day streak", value: `${learner.streak}/7`, progress: streakGoal, done: learner.streak >= 7 },
-              { label: "3 lessons this week", value: `${weeklyCompleted}/3`, progress: weeklyGoal, done: weeklyCompleted >= 3 },
-              { label: "Unlock your first milestone", value: `${learner.completedDays.length}/10`, progress: milestoneGoal, done: learner.completedDays.length >= 10 },
-            ].map((goal) => (
-              <div key={goal.label} style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                  <span style={{ fontSize: "0.76rem", fontWeight: 700, color: "var(--text)" }}>{goal.label}</span>
-                  <span style={{ fontSize: "0.74rem", color: goal.done ? "var(--green)" : "var(--text-muted)" }}>{goal.done ? "Done" : goal.value}</span>
-                </div>
-                <div className="progress-track" style={{ height: 6 }}>
-                  <div className="progress-fill" style={{ width: `${goal.progress}%`, background: goal.done ? "linear-gradient(90deg, #10b981, #22c55e)" : "linear-gradient(90deg, var(--brand), var(--brand2))" }} />
-                </div>
-              </div>
-            ))}
+      {/* ── Stats row ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+        {[
+          { label: "Streak", value: `${learner.streak}d`, emoji: "🔥" },
+          { label: "XP", value: `${learner.xp}`, emoji: "⚡" },
+          { label: "Weak", value: `${learner.weakTopics.length}`, emoji: "📌" },
+        ].map(s => (
+          <div key={s.label} className="card" style={{ padding: "10px 12px", textAlign: "center" }}>
+            <span style={{ fontSize: "1.1rem" }}>{s.emoji}</span>
+            <p style={{ fontSize: "0.88rem", fontWeight: 800, color: "var(--text)" }}>{s.value}</p>
+            <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{s.label}</p>
           </div>
-        </div>
-
-        <div className="card" style={{ padding: "16px 18px" }}>
-          <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>🗓 Weekly review</p>
-          <div style={{ display: "grid", gap: 8 }}>
-            {[
-              { label: "Lessons done", value: `${learner.completedDays.length} total` },
-              { label: "Quiz accuracy", value: `${quizAccuracy}% recent` },
-              { label: "Weak topics", value: learner.weakTopics.length > 0 ? `${learner.weakTopics.length} active` : "No weak topics" },
-              { label: "Next focus", value: nextFocusTopic },
-            ].map((item) => (
-              <div key={item.label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: item.label === "Next focus" ? "none" : "1px solid var(--border)" }}>
-                <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{item.label}</span>
-                <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text)", textAlign: "right" }}>{item.value}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Today's Tip */}
-      <div className="card-sm" style={{ padding: "14px 16px", background: "var(--surface2)", border: "1px solid var(--border)", display: "flex", alignItems: "flex-start", gap: 10 }}>
-        <div style={{ fontSize: "1.3rem", flexShrink: 0 }}>💡</div>
-        <div>
-          <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: "0.06em" }}>Today's Tip</p>
-          <p style={{ fontSize: "0.87rem", color: "var(--text2)", lineHeight: 1.55 }}>{todayTip}</p>
-        </div>
-      </div>
-
-      {/* Student View Navigation */}
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-        {([
-          { k: "dashboard" as const, l: "🏠 Dashboard" },
-          { k: "achievements" as const, l: "🏆 Achievements" },
-          { k: "learning-path" as const, l: "🗺️ Learning Path" },
-          { k: "smart-review" as const, l: "🧠 Smart Review" },
-          { k: "bookmarks" as const, l: `⭐ Bookmarks (${bookmarks.length})` },
-        ] as const).map(item => (
-          <button key={item.k} onClick={() => onStudentViewChange(item.k)} style={{
-            padding: "7px 14px", borderRadius: 10, fontSize: "0.78rem", fontWeight: 600,
-            border: `1.5px solid ${studentView === item.k ? "var(--brand)" : "var(--border)"}`,
-            background: studentView === item.k ? "var(--brand-glow)" : "var(--surface)",
-            color: studentView === item.k ? "var(--brand2)" : "var(--text-muted)", cursor: "pointer",
-            transition: "all 0.15s",
-          }}>{item.l}</button>
         ))}
       </div>
 
-      {/* Student View Content */}
-      {studentView === "dashboard" && (
-        <>
-          {/* Calendar Heatmap */}
-          <CalendarHeatmap completedDays={learner.completedDays} currentDay={learner.currentDay} totalDays={100} />
-
-          {/* Daily Goals & Stats */}
-          <DailyGoalTracker xp={learner.xp} streak={learner.streak} completedDays={learner.completedDays} lastActiveDate={learner.lastActiveDate} />
-
-          {/* Quick AI actions */}
-      <div>
-        <p style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-          🤖 Quick AI Actions
-        </p>
-        <div className="responsive-grid-2">
-          {[
-            { icon: "🎲", label: "Surprise Tech Fact", prompt: "Tell me one surprising, fun fact about computers, programming, or AI that most beginners don't know. Keep it short and exciting, in Indian English." },
-            { icon: "💼", label: "Career Guidance", prompt: "I'm a Class 12 pass student figuring out which college/career path to take, starting from zero computer knowledge. Give me quick, practical career advice for getting into tech in India." },
-            { icon: "🧩", label: "Random Practice Question", prompt: "Give me one random practice question from what I've learned so far, and wait for my answer before revealing the solution." },
-            { icon: "📰", label: "Today's Tech News", prompt: "Give me 2-3 short, simple summaries of interesting recent developments in technology or AI that a beginner would find exciting, in Indian English." },
-          ].map((qa) => (
-            <button
-              key={qa.label}
-              onClick={() => onAskAi(qa.prompt)}
-              className="card-sm"
-              style={{ padding: "12px 14px", display: "flex", alignItems: "center", gap: 10, textAlign: "left", cursor: "pointer", border: "1px solid var(--border)", background: "var(--surface)" }}
-            >
-              <span style={{ fontSize: "1.3rem" }}>{qa.icon}</span>
-              <span style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text)" }}>{qa.label}</span>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Learning path */}
-      <div className="card" style={{ padding: "16px 18px" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <p style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>
-            🧭 Learning path
-          </p>
-          <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Completed • In progress • Upcoming</span>
-        </div>
-        <div style={{ display: "grid", gap: 10 }}>
-          {PHASES.map((ph) => {
-            const phDays = getLessonsInPhase(ph.id);
-            const phDone = phDays.filter((d) => (learner.completedDays ?? []).includes(d.day)).length;
-            const col = PHASE_COLORS[ph.id - 1] ?? "#6366f1";
-            const status = phDone === phDays.length ? "Completed" : phDone > 0 ? "In progress" : "Upcoming";
-            const isMastery = ph.id >= 18;
-            return (
-              <div key={ph.id} style={{ padding: "12px 14px", borderRadius: 12, border: "1px solid var(--border)", background: phDone === phDays.length ? "rgba(16,185,129,0.1)" : phDone > 0 ? "rgba(99,102,241,0.12)" : "var(--surface2)" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
-                    <span style={{ fontSize: "1.1rem" }}>{ph.icon}</span>
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text)" }}>{ph.name}</p>
-                      <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{phDone}/{phDays.length} days • {status}</p>
-                    </div>
-                  </div>
-                  <span style={{ fontSize: "0.7rem", padding: "4px 8px", borderRadius: 999, background: isMastery ? "rgba(245,158,11,0.16)" : "rgba(99,102,241,0.14)", color: isMastery ? "var(--amber)" : "var(--brand2)", fontWeight: 700 }}>{isMastery ? "Mastery" : "Core"}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Badges */}
+      {/* ── Badges (if any) ── */}
       {learner.badges.length > 0 && (
-        <div>
-          <p style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
-            🏆 Your Badges
-          </p>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <div className="card" style={{ padding: "14px 16px" }}>
+          <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 8 }}>🏆 Badges</p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             {learner.badges.map(b => {
               const info: Record<string, { emoji: string; label: string }> = {
-                week1: { emoji: "🥉", label: "1 Week Done!" },
-                week2: { emoji: "🥈", label: "2 Weeks!" },
-                week3: { emoji: "🥇", label: "3 Weeks!" },
-                month1: { emoji: "🏆", label: "1 Month!" },
-                halfway: { emoji: "💎", label: "Halfway!" },
-                graduate: { emoji: "🎓", label: "Graduate!" },
+                week1: { emoji: "🥉", label: "1 Week" }, week2: { emoji: "🥈", label: "2 Weeks" },
+                week3: { emoji: "🥇", label: "3 Weeks" }, month1: { emoji: "🏆", label: "1 Month" },
+                halfway: { emoji: "💎", label: "Halfway" }, graduate: { emoji: "🎓", label: "Graduate" },
               };
               const bi = info[b] ?? { emoji: "⭐", label: b };
               return (
-                <div key={b} className="card-sm" style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 6, fontSize: "0.8rem", fontWeight: 600 }}>
-                  <span style={{ fontSize: "1.2rem" }}>{bi.emoji}</span>
-                  <span style={{ color: "var(--text)" }}>{bi.label}</span>
-                </div>
+                <span key={b} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 999, background: "var(--surface2)", fontSize: "0.78rem", fontWeight: 600 }}>
+                  <span>{bi.emoji}</span> {bi.label}
+                </span>
               );
             })}
           </div>
         </div>
       )}
 
-      {/* Weak Topics */}
+      {/* ── Weak Topics ── */}
       {learner.weakTopics.length > 0 && (
-        <div className="card-sm" style={{ padding: "14px 16px", borderLeft: "3px solid var(--amber)" }}>
-          <p style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--amber)", marginBottom: 8 }}>
-            ⚠️ Practice These — Weak Topics
-          </p>
+        <div className="card" style={{ padding: "14px 16px", borderLeft: "3px solid var(--amber)" }}>
+          <p style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--amber)", marginBottom: 6 }}>⚠️ Practice These</p>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {learner.weakTopics.slice(0, 8).map(t => (
-              <span key={t} className="badge badge-amber">{t}</span>
+            {learner.weakTopics.slice(0, 6).map(t => (
+              <span key={t} style={{ padding: "3px 10px", borderRadius: 999, background: "rgba(245,158,11,0.1)", color: "var(--amber)", fontSize: "0.75rem", fontWeight: 600 }}>{t}</span>
             ))}
           </div>
         </div>
       )}
-        </>
-      )}
 
-      {/* Achievements View */}
-      {studentView === "achievements" && (
-        <AchievementPanel learner={learner} />
-      )}
-
-      {/* Learning Path View */}
+      {/* ── Sub-views for Journey ── */}
       {studentView === "learning-path" && (
         <LearningPath completedDays={learner.completedDays} currentDay={learner.currentDay || 1} onSelectDay={onSelectDay} />
       )}
-
-      {/* Smart Review View */}
       {studentView === "smart-review" && (
         <SmartReview completedDays={learner.completedDays} testScores={learner.testScores} currentDay={learner.currentDay || 1} onSelectDay={onSelectDay} />
       )}
-
-      {/* Bookmarks View */}
+      {studentView === "achievements" && (
+        <AchievementPanel learner={learner} />
+      )}
       {studentView === "bookmarks" && (
         <BookmarkPanel bookmarks={bookmarks} onToggle={onToggleBookmark} onSelectDay={onSelectDay} />
       )}
@@ -2492,17 +2249,13 @@ export default function Home() {
             background: "linear-gradient(135deg, var(--brand), var(--brand2))", fontSize: "1.1rem",
           }}>🎓</div>
           <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: "0.88rem", color: "var(--text)", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Computer Skills Academy</div>
-            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>AI Learning · Indian English</div>
+            <div style={{ fontWeight: 800, fontSize: "0.88rem", color: "var(--text)", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>CSA</div>
+            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Day {learner.currentDay || 1} • {learner.completedDays?.length ?? 0}/100</div>
           </div>
         </div>
 
-        {/* Stats */}
-        <div style={{ flex: 1, display: "flex", justifyContent: "center" }}>
-          {hydrated && <StatsRow learner={learner} />}
-        </div>
-
         {/* Actions */}
+        <div style={{ flex: 1 }} />
         <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
           {isAdminUser && (
             <button
@@ -2516,23 +2269,6 @@ export default function Home() {
           <button className="btn-icon" onClick={() => { setEditName(learner.name); setEditProfile(learner.profile); setDisplayNamePassword(""); setDisplayNameMsg(null); setShowSettings(true); }} data-tip="Settings">
             <Settings size={14} />
           </button>
-          <button className="btn-icon" onClick={exportProgress} data-tip="Export progress">
-            <Download size={14} />
-          </button>
-          <label className="btn-icon" style={{ cursor: "pointer" }} data-tip="Import progress">
-            <Upload size={14} />
-            <input ref={importRef} type="file" accept=".json" className="hidden" onChange={e => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              const reader = new FileReader();
-              reader.onload = ev => {
-                try { importProgress(ev.target?.result as string); console.log("✓ Progress restored!"); }
-                catch { console.log("❌ Invalid backup file."); }
-              };
-              reader.readAsText(file);
-              e.target.value = "";
-            }} />
-          </label>
         </div>
       </header>
 
