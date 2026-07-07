@@ -1,0 +1,17 @@
+name = "csa-telegram-bot"
+main = "src/index.js"
+compatibility_date = "2024-12-01"
+
+[vars]
+# Non-secret config — safe to commit
+FIREBASE_PROJECT_ID = "learnpc-4fd7b"
+ADMIN_TELEGRAM_IDS = "1719425054"
+PASS_THRESHOLD = "70"
+MIMO_BASE_URL = "https://opencode.ai/zen/v1"
+MIMO_MODEL = "mimo-v2.5-free"
+
+# ── Secrets (set via: wrangler secret put <NAME>) ──
+# BOT_TOKEN        — your Telegram Bot API key from @BotFather
+# FIREBASE_SA_KEY  — full JSON of your Firebase service account
+# MIMO_API_KEY     — your Mimo/OpenCode Zen API key
+# NVIDIA_API_KEY   — your NVIDIA NIM API key (fallback)

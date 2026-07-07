@@ -1,0 +1,18 @@
+{
+  "name": "csa-telegram-bot",
+  "version": "1.0.0",
+  "description": "Computer Skills Academy Telegram Bot — Cloudflare Worker",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "set-token": "wrangler secret put BOT_TOKEN",
+    "set-firebase": "wrangler secret put FIREBASE_SA_KEY"
+  },
+  "dependencies": {
+    "grammy": "^1.21.0"
+  },
+  "devDependencies": {
+    "wrangler": "^3.0.0"
+  }
+}
