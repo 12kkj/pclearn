@@ -20,6 +20,13 @@ import { checkPassword, savePassword, saveDeviceId, getSavedDeviceId, generateDe
 import { MODEL_ASSIGNMENTS } from "@/constants/models";
 import AdminPanel from "@/components/admin/AdminPanel";
 import type { AdminCurriculumState } from "@/types";
+import CalendarHeatmap from "@/components/student/CalendarHeatmap";
+import AchievementPanel from "@/components/student/AchievementPanel";
+import SmartReview from "@/components/student/SmartReview";
+import LearningPath from "@/components/student/LearningPath";
+import BookmarkPanel, { type BookmarkItem } from "@/components/student/BookmarkPanel";
+import DailyGoalTracker from "@/components/student/DailyGoalTracker";
+import OnboardingFlow from "@/components/student/OnboardingFlow";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ResourceSection {
@@ -863,6 +870,7 @@ const HOME_TIPS = [
 function HomeTab({
   learner, hydrated,
   onStartDay, onContinueLesson, onGoQuiz, isStreaming, hasLesson, onAskAi,
+  onSelectDay, bookmarks, onToggleBookmark, studentView, onStudentViewChange,
 }: {
   learner: LearnerState; hydrated: boolean;
   onStartDay: (day: number) => void;
@@ -870,6 +878,9 @@ function HomeTab({
   onGoQuiz: () => void;
   isStreaming: boolean; hasLesson: boolean;
   onAskAi: (prompt: string) => void;
+  onSelectDay: (day: number) => void;
+  bookmarks: BookmarkItem[]; onToggleBookmark: (day: number) => void;
+  studentView: StudentView; onStudentViewChange: (v: StudentView) => void;
 }) {
   const isNew = learner.currentDay === 0 && learner.completedDays.length === 0;
   const nextDay = isNew ? 1 : (learner.currentDay + 1 <= 100 ? learner.currentDay + 1 : 100);
@@ -1158,7 +1169,35 @@ function HomeTab({
         </div>
       </div>
 
-      {/* Quick AI actions */}
+      {/* Student View Navigation */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+        {([
+          { k: "dashboard" as const, l: "🏠 Dashboard" },
+          { k: "achievements" as const, l: "🏆 Achievements" },
+          { k: "learning-path" as const, l: "🗺️ Learning Path" },
+          { k: "smart-review" as const, l: "🧠 Smart Review" },
+          { k: "bookmarks" as const, l: `⭐ Bookmarks (${bookmarks.length})` },
+        ] as const).map(item => (
+          <button key={item.k} onClick={() => onStudentViewChange(item.k)} style={{
+            padding: "7px 14px", borderRadius: 10, fontSize: "0.78rem", fontWeight: 600,
+            border: `1.5px solid ${studentView === item.k ? "var(--brand)" : "var(--border)"}`,
+            background: studentView === item.k ? "var(--brand-glow)" : "var(--surface)",
+            color: studentView === item.k ? "var(--brand2)" : "var(--text-muted)", cursor: "pointer",
+            transition: "all 0.15s",
+          }}>{item.l}</button>
+        ))}
+      </div>
+
+      {/* Student View Content */}
+      {studentView === "dashboard" && (
+        <>
+          {/* Calendar Heatmap */}
+          <CalendarHeatmap completedDays={learner.completedDays} currentDay={learner.currentDay} totalDays={100} />
+
+          {/* Daily Goals & Stats */}
+          <DailyGoalTracker xp={learner.xp} streak={learner.streak} completedDays={learner.completedDays} lastActiveDate={learner.lastActiveDate} />
+
+          {/* Quick AI actions */}
       <div>
         <p style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>
           🤖 Quick AI Actions
@@ -1256,6 +1295,28 @@ function HomeTab({
             ))}
           </div>
         </div>
+      )}
+        </>
+      )}
+
+      {/* Achievements View */}
+      {studentView === "achievements" && (
+        <AchievementPanel learner={learner} />
+      )}
+
+      {/* Learning Path View */}
+      {studentView === "learning-path" && (
+        <LearningPath completedDays={learner.completedDays} currentDay={learner.currentDay || 1} onSelectDay={onSelectDay} />
+      )}
+
+      {/* Smart Review View */}
+      {studentView === "smart-review" && (
+        <SmartReview completedDays={learner.completedDays} testScores={learner.testScores} currentDay={learner.currentDay || 1} onSelectDay={onSelectDay} />
+      )}
+
+      {/* Bookmarks View */}
+      {studentView === "bookmarks" && (
+        <BookmarkPanel bookmarks={bookmarks} onToggle={onToggleBookmark} onSelectDay={onSelectDay} />
       )}
     </div>
   );
@@ -1576,6 +1637,7 @@ function QuizPanel({ quiz, answers, evalResult, onAnswer, onSubmit, onNextLesson
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
 type Tab = "home" | "lesson" | "quiz" | "chat" | "roadmap";
+type StudentView = "dashboard" | "achievements" | "learning-path" | "bookmarks" | "smart-review";
 
 export default function Home() {
   // Selected student profile – null until login completes.
@@ -1644,6 +1706,34 @@ export default function Home() {
   } | null>(null);
   // ── Lesson timer ──
   const lessonStartTime = React.useRef<number>(0);
+
+  // ── Student Features ──
+  const [studentView, setStudentView] = React.useState<StudentView>("dashboard");
+  const [bookmarks, setBookmarks] = React.useState<BookmarkItem[]>(() => {
+    try { return JSON.parse(localStorage.getItem("csa_bookmarks") ?? "[]"); } catch { return []; }
+  });
+  const [showStudentOnboarding, setShowStudentOnboarding] = React.useState(false);
+
+  // Load onboarding state
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const seen = localStorage.getItem("csa_student_onboarding_seen");
+    if (!seen && studentId) setShowStudentOnboarding(true);
+  }, [studentId]);
+
+  // Persist bookmarks
+  React.useEffect(() => {
+    try { localStorage.setItem("csa_bookmarks", JSON.stringify(bookmarks)); } catch { /* quota */ }
+  }, [bookmarks]);
+
+  const toggleBookmark = React.useCallback((day: number) => {
+    setBookmarks(prev => {
+      const exists = prev.find(b => b.day === day);
+      if (exists) return prev.filter(b => b.day !== day);
+      const meta = getLessonByDay(day);
+      return [...prev, { day, title: meta?.title ?? `Day ${day}`, bookmarkedAt: new Date().toISOString() }];
+    });
+  }, []);
 
   // Mount guard — prevents SSR/client hydration mismatch
   React.useEffect(() => { setMounted(true); }, []);
@@ -2245,6 +2335,14 @@ export default function Home() {
         <LoginScreen onComplete={handleLoginComplete} onAdminLogin={handleAdminLogin} />
       )}
 
+      {/* Onboarding Tour for first-time users */}
+      {showStudentOnboarding && (
+        <OnboardingFlow onComplete={() => {
+          setShowStudentOnboarding(false);
+          if (typeof window !== "undefined") localStorage.setItem("csa_student_onboarding_seen", "true");
+        }} />
+      )}
+
       {/* Admin Panel */}
       {showAdminPanel && (
         <AdminPanel onClose={() => setShowAdminPanel(false)} />
@@ -2439,6 +2537,14 @@ export default function Home() {
                 setShowAskAiDrawer(true);
                 handleSendChat(prompt, MODEL_ASSIGNMENTS.chat);
               }}
+              onSelectDay={async (day) => {
+                try { await streamLesson(day); setActiveTab("lesson"); }
+                catch (e) { console.error(e); }
+              }}
+              bookmarks={bookmarks}
+              onToggleBookmark={toggleBookmark}
+              studentView={studentView}
+              onStudentViewChange={setStudentView}
             />
           </div>
         )}

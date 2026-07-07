@@ -2,382 +2,334 @@
 
 import React, { useState, useCallback, useEffect } from "react";
 import {
-  Plus, Trash2, Play, ExternalLink, Youtube, Globe, FileText,
+  Plus, Trash2, Youtube, Globe, FileText,
   Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronRight,
-  Sparkles, BookOpen, Brain, Link2, RefreshCw, Download, Upload,
-  Settings, Shield, Eye, Edit3, Save, X, Search, Clock,
+  Sparkles, BookOpen, Brain, Link2, Download, Upload,
+  Shield, Eye, Edit3, Save, X, Search,
+  ArrowUp, ArrowDown, MessageSquare, TestTube2, Route, Layers,
+  Tag, GripVertical,
 } from "lucide-react";
 import type {
   AdminDayContent, AdminResourceLink, AdminCurriculumState,
-  StudentId,
+  AdminPhase, AdminSubDay, AdminSubTopic, AdminPipelineStatus,
+  AdminDayTag, AdminModelTest,
 } from "@/types";
 import { PHASES, getLessonByDay } from "@/lib/curriculum";
+import { MODELS, MODEL_INFO } from "@/constants/models";
+import type { ModelId } from "@/constants/models";
 
-// ── LocalStorage helpers ──────────────────────────────────────────────────────
+// ── Constants ──────────────────────────────────────────────────────────────
 const ADMIN_STORAGE_KEY = "csa_admin_curriculum";
+const PIPELINE_STAGES: { key: AdminPipelineStatus; label: string; icon: string; color: string }[] = [
+  { key: "draft", label: "Draft", icon: "📝", color: "#6b7280" },
+  { key: "resources_added", label: "Resources", icon: "🔗", color: "#3b82f6" },
+  { key: "transcribed", label: "Transcribed", icon: "🎙️", color: "#f97316" },
+  { key: "lesson_generated", label: "Lesson Ready", icon: "📖", color: "#8b5cf6" },
+  { key: "quiz_generated", label: "Quiz Ready", icon: "❓", color: "#06b6d4" },
+  { key: "reviewed", label: "Reviewed", icon: "👁️", color: "#eab308" },
+  { key: "published", label: "Published", icon: "🚀", color: "#10b981" },
+];
+const ALL_TAGS: { key: AdminDayTag; label: string; color: string }[] = [
+  { key: "needs_review", label: "Needs Review", color: "#f97316" },
+  { key: "premium", label: "Premium", color: "#eab308" },
+  { key: "quick_lesson", label: "Quick Lesson", color: "#10b981" },
+  { key: "needs_hindi_video", label: "Needs Hindi", color: "#ef4444" },
+  { key: "needs_practice", label: "Needs Practice", color: "#8b5cf6" },
+  { key: "draft", label: "Draft", color: "#6b7280" },
+];
 
+// ── Helpers ────────────────────────────────────────────────────────────────
 function loadAdminCurriculum(): AdminCurriculumState {
   try {
     const raw = localStorage.getItem(ADMIN_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const p = JSON.parse(raw);
+      return {
+        phases: p.phases ?? PHASES.map(ph => ({
+          id: ph.id, name: ph.name, icon: ph.icon, description: `${ph.name} phase`,
+          order: ph.id, color: ["#3b82f6","#8b5cf6","#f97316","#22c55e","#14b8a6","#eab308","#ef4444","#6366f1","#06b6d4","#ec4899","#7c3aed"][ph.id - 1] ?? "#6366f1",
+          dayIds: ph.days, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+        })),
+        days: p.days ?? {},
+        subDays: p.subDays ?? {},
+        lastUpdated: p.lastUpdated ?? new Date().toISOString(),
+      };
+    }
   } catch { /* ignore */ }
-  return { days: {}, lastUpdated: new Date().toISOString() };
+  return {
+    phases: PHASES.map(ph => ({
+      id: ph.id, name: ph.name, icon: ph.icon, description: `${ph.name} phase`,
+      order: ph.id, color: ["#3b82f6","#8b5cf6","#f97316","#22c55e","#14b8a6","#eab308","#ef4444","#6366f1","#06b6d4","#ec4899","#7c3aed"][ph.id - 1] ?? "#6366f1",
+      dayIds: ph.days, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+    })),
+    days: {}, subDays: {}, lastUpdated: new Date().toISOString(),
+  };
 }
 
 function saveAdminCurriculum(state: AdminCurriculumState) {
-  try {
-    localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify({ ...state, lastUpdated: new Date().toISOString() }));
-  } catch { /* quota exceeded */ }
+  try { localStorage.setItem(ADMIN_STORAGE_KEY, JSON.stringify({ ...state, lastUpdated: new Date().toISOString() })); } catch { /* quota */ }
 }
 
-function generateId(): string {
-  return `res_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
+function genId(): string { return `id_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`; }
 
 function extractYouTubeId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
-    /^([a-zA-Z0-9_-]{11})$/,
-  ];
-  for (const p of patterns) {
-    const m = url.match(p);
-    if (m) return m[1];
-  }
-  return null;
+  const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+  return m ? m[1] : (url.match(/^([a-zA-Z0-9_-]{11})$/) ? url : null);
 }
 
-// ── Resource Link Editor ──────────────────────────────────────────────────────
-function ResourceLinkEditor({
-  resource,
-  onSave,
-  onDelete,
-  onCancel,
-}: {
-  resource?: AdminResourceLink;
-  onSave: (r: AdminResourceLink) => void;
-  onDelete?: () => void;
-  onCancel: () => void;
+function pipeColor(s: AdminPipelineStatus): string { return PIPELINE_STAGES.find(x => x.key === s)?.color ?? "#6b7280"; }
+function nextPipe(s: AdminPipelineStatus): AdminPipelineStatus {
+  const i = PIPELINE_STAGES.findIndex(x => x.key === s);
+  return i < PIPELINE_STAGES.length - 1 ? PIPELINE_STAGES[i + 1].key : s;
+}
+
+// ── Resource Link Editor ──────────────────────────────────────────────────
+function ResourceLinkEditor({ resource, onSave, onDelete, onCancel }: {
+  resource?: AdminResourceLink; onSave: (r: AdminResourceLink) => void;
+  onDelete?: () => void; onCancel: () => void;
 }) {
   const [url, setUrl] = useState(resource?.url ?? "");
   const [title, setTitle] = useState(resource?.title ?? "");
   const [description, setDescription] = useState(resource?.description ?? "");
   const [type, setType] = useState<"youtube" | "blog" | "web">(resource?.type ?? "youtube");
-
-  const detectType = (u: string) => {
-    if (u.includes("youtube.com") || u.includes("youtu.be")) return "youtube" as const;
-    if (u.includes("blog") || u.includes("medium.com") || u.includes("dev.to") || u.includes("hashnode")) return "blog" as const;
-    return "web" as const;
-  };
+  const [autoFilling, setAutoFilling] = useState(false);
 
   useEffect(() => {
-    if (!resource) setType(detectType(url));
-  }, [url]);
+    if (!resource) {
+      if (url.includes("youtube.com") || url.includes("youtu.be")) setType("youtube");
+      else if (url.includes("blog") || url.includes("medium.com") || url.includes("dev.to")) setType("blog");
+      else if (url.trim()) setType("web");
+    }
+  }, [url, resource]);
+
+  const handleAutoFill = async () => {
+    if (!url.trim()) return;
+    setAutoFilling(true);
+    try {
+      const res = await fetch("/api/tutor", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "admin_auto_fill_link", url: url.trim(), title, type }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.title) setTitle(data.title);
+        if (data.description) setDescription(data.description);
+      }
+    } catch { /* ignore */ }
+    setAutoFilling(false);
+  };
 
   const handleSave = () => {
     if (!url.trim() || !title.trim()) return;
     const ytId = extractYouTubeId(url);
     onSave({
-      id: resource?.id ?? generateId(),
-      type,
-      url: url.trim(),
-      title: title.trim(),
+      id: resource?.id ?? genId(), type, url: url.trim(), title: title.trim(),
       description: description.trim(),
       thumbnailUrl: ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : undefined,
-      channelName: type === "youtube" ? undefined : undefined,
       addedAt: resource?.addedAt ?? new Date().toISOString(),
     });
   };
 
   return (
-    <div style={{
-      padding: "14px 16px", borderRadius: 12, border: "1.5px solid var(--brand)",
-      background: "var(--surface2)", display: "flex", flexDirection: "column", gap: 10,
-    }}>
+    <div style={{ padding: 14, borderRadius: 12, border: "1.5px solid var(--brand)", background: "var(--surface2)", display: "flex", flexDirection: "column", gap: 10 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <Link2 size={14} style={{ color: "var(--brand)" }} />
-        <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>
-          {resource ? "Edit Resource" : "Add Resource"}
-        </span>
+        <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>{resource ? "Edit Resource" : "Add Resource"}</span>
       </div>
-
-      {/* Type selector */}
       <div style={{ display: "flex", gap: 6 }}>
         {(["youtube", "blog", "web"] as const).map(t => (
-          <button
-            key={t}
-            onClick={() => setType(t)}
-            style={{
-              padding: "5px 12px", borderRadius: 8, fontSize: "0.75rem", fontWeight: 600,
-              border: `1.5px solid ${type === t ? "var(--brand)" : "var(--border)"}`,
-              background: type === t ? "var(--brand-glow)" : "var(--surface)",
-              color: type === t ? "var(--brand2)" : "var(--text-muted)",
-              cursor: "pointer", transition: "all 0.15s",
-            }}
-          >
+          <button key={t} onClick={() => setType(t)} style={{
+            padding: "5px 12px", borderRadius: 8, fontSize: "0.75rem", fontWeight: 600,
+            border: `1.5px solid ${type === t ? "var(--brand)" : "var(--border)"}`,
+            background: type === t ? "var(--brand-glow)" : "var(--surface)",
+            color: type === t ? "var(--brand2)" : "var(--text-muted)", cursor: "pointer",
+          }}>
             {t === "youtube" ? "🎥 YouTube" : t === "blog" ? "📝 Blog" : "🌐 Web"}
           </button>
         ))}
       </div>
-
-      {/* URL */}
-      <input
-        type="url"
-        className="input-field"
-        placeholder={type === "youtube" ? "YouTube URL (e.g., https://youtube.com/watch?v=...)" : "Website URL"}
-        value={url}
-        onChange={e => setUrl(e.target.value)}
-        autoFocus
-      />
-
-      {/* Title */}
-      <input
-        type="text"
-        className="input-field"
-        placeholder="Resource title"
-        value={title}
-        onChange={e => setTitle(e.target.value)}
-      />
-
-      {/* Description */}
-      <input
-        type="text"
-        className="input-field"
-        placeholder="Short description (optional)"
-        value={description}
-        onChange={e => setDescription(e.target.value)}
-      />
-
-      {/* Preview */}
+      <div style={{ display: "flex", gap: 6 }}>
+        <input type="url" className="input-field" style={{ flex: 1 }} placeholder={type === "youtube" ? "YouTube URL" : "Website URL"} value={url} onChange={e => setUrl(e.target.value)} autoFocus />
+        <button className="btn-primary sm" onClick={handleAutoFill} disabled={!url.trim() || autoFilling} style={{ whiteSpace: "nowrap", display: "flex", alignItems: "center", gap: 4 }}>
+          {autoFilling ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Auto-Fill
+        </button>
+      </div>
+      <input type="text" className="input-field" placeholder="Resource title" value={title} onChange={e => setTitle(e.target.value)} />
+      <input type="text" className="input-field" placeholder="Short description (optional)" value={description} onChange={e => setDescription(e.target.value)} />
       {url && type === "youtube" && extractYouTubeId(url) && (
-        <div style={{ display: "flex", gap: 10, alignItems: "center", padding: "8px 10px", borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)" }}>
-          <img
-            src={`https://img.youtube.com/vi/${extractYouTubeId(url)}/hqdefault.jpg`}
-            alt="thumbnail"
-            style={{ width: 80, height: 45, borderRadius: 6, objectFit: "cover" }}
-          />
+        <div style={{ display: "flex", gap: 10, alignItems: "center", padding: 8, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)" }}>
+          <img src={`https://img.youtube.com/vi/${extractYouTubeId(url)}/hqdefault.jpg`} alt="" style={{ width: 80, height: 45, borderRadius: 6, objectFit: "cover" }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <p style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              {title || "Untitled"}
-            </p>
+            <p style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{title || "Untitled"}</p>
             <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>YouTube Video</p>
           </div>
         </div>
       )}
-
-      {/* Actions */}
       <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-        {onDelete && (
-          <button
-            onClick={onDelete}
-            style={{
-              padding: "6px 12px", borderRadius: 8, fontSize: "0.78rem", fontWeight: 600,
-              border: "1px solid var(--red)", background: "rgba(239,68,68,0.1)",
-              color: "var(--red)", cursor: "pointer",
-            }}
-          >
-            <Trash2 size={12} /> Delete
-          </button>
-        )}
+        {onDelete && <button onClick={onDelete} style={{ padding: "6px 12px", borderRadius: 8, fontSize: "0.78rem", fontWeight: 600, border: "1px solid var(--red)", background: "rgba(239,68,68,0.1)", color: "var(--red)", cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}><Trash2 size={12} /> Delete</button>}
         <button onClick={onCancel} className="btn-secondary sm">Cancel</button>
-        <button
-          onClick={handleSave}
-          className="btn-primary sm"
-          disabled={!url.trim() || !title.trim()}
-        >
-          <Save size={12} /> {resource ? "Update" : "Add"}
-        </button>
+        <button onClick={handleSave} className="btn-primary sm" disabled={!url.trim() || !title.trim()}><Save size={12} /> {resource ? "Update" : "Add"}</button>
       </div>
     </div>
   );
 }
 
-// ── Day Content Editor ────────────────────────────────────────────────────────
-function DayContentEditor({
-  day,
-  existing,
-  onSave,
-  onClose,
-}: {
-  day: number;
-  existing?: AdminDayContent;
-  onSave: (content: AdminDayContent) => void;
-  onClose: () => void;
+// ── Sub-Topic Editor ──────────────────────────────────────────────────────
+function SubTopicEditor({ subTopics, onChange }: { subTopics: AdminSubTopic[]; onChange: (st: AdminSubTopic[]) => void }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [name, setName] = useState("");
+  const [desc, setDesc] = useState("");
+  const [obj, setObj] = useState("");
+
+  const handleAdd = () => {
+    if (!name.trim()) return;
+    onChange([...subTopics, { id: genId(), name: name.trim(), description: desc.trim(), objectives: obj.split(",").map(o => o.trim()).filter(Boolean), resources: [], order: subTopics.length }]);
+    setName(""); setDesc(""); setObj(""); setShowAdd(false);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+        <p style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text)" }}>📚 Sub-Topics ({subTopics.length})</p>
+        <button className="btn-secondary sm" onClick={() => setShowAdd(true)}><Plus size={12} /> Add</button>
+      </div>
+      {subTopics.map(st => (
+        <div key={st.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)", marginBottom: 4 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text)" }}>{st.name}</p>
+            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{st.description}</p>
+            {st.objectives.length > 0 && <p style={{ fontSize: "0.65rem", color: "var(--cyan)", marginTop: 2 }}>🎯 {st.objectives.join(" • ")}</p>}
+          </div>
+          <button onClick={() => onChange(subTopics.filter(x => x.id !== st.id))} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)", padding: 4 }}><Trash2 size={12} /></button>
+        </div>
+      ))}
+      {showAdd && (
+        <div style={{ padding: 10, borderRadius: 8, border: "1px solid var(--brand)", background: "var(--surface2)", display: "flex", flexDirection: "column", gap: 6 }}>
+          <input className="input-field" placeholder="Sub-topic name" value={name} onChange={e => setName(e.target.value)} autoFocus />
+          <input className="input-field" placeholder="Description" value={desc} onChange={e => setDesc(e.target.value)} />
+          <input className="input-field" placeholder="Objectives (comma separated)" value={obj} onChange={e => setObj(e.target.value)} />
+          <div style={{ display: "flex", gap: 6, justifyContent: "flex-end" }}>
+            <button className="btn-secondary sm" onClick={() => setShowAdd(false)}>Cancel</button>
+            <button className="btn-primary sm" onClick={handleAdd} disabled={!name.trim()}>Add</button>
+          </div>
+        </div>
+      )}
+      {!showAdd && subTopics.length === 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", textAlign: "center", padding: 8 }}>No sub-topics yet.</p>}
+    </div>
+  );
+}
+
+// ── Day Content Editor ────────────────────────────────────────────────────
+function DayContentEditor({ day, existing, curriculum, onSave, onClose }: {
+  day: number; existing?: AdminDayContent; curriculum: AdminCurriculumState;
+  onSave: (c: AdminDayContent) => void; onClose: () => void;
 }) {
-  const defaultMeta = getLessonByDay(day);
-  const [title, setTitle] = useState(existing?.title ?? defaultMeta?.title ?? "");
+  const def = getLessonByDay(day);
+  const [title, setTitle] = useState(existing?.title ?? def?.title ?? "");
   const [description, setDescription] = useState(existing?.description ?? "");
-  const [difficulty, setDifficulty] = useState<"beginner" | "intermediate" | "advanced">(existing?.difficulty ?? defaultMeta?.difficulty ?? "beginner");
-  const [estimatedMinutes, setEstimatedMinutes] = useState(existing?.estimatedMinutes ?? defaultMeta?.estimatedMinutes ?? 30);
-  const [topics, setTopics] = useState(existing?.topics?.join(", ") ?? defaultMeta?.topics?.join(", ") ?? "");
+  const [difficulty, setDifficulty] = useState<"beginner" | "intermediate" | "advanced">(existing?.difficulty ?? def?.difficulty ?? "beginner");
+  const [estimatedMinutes, setEstimatedMinutes] = useState(existing?.estimatedMinutes ?? def?.estimatedMinutes ?? 30);
+  const [topics, setTopics] = useState(existing?.topics?.join(", ") ?? def?.topics?.join(", ") ?? "");
   const [resources, setResources] = useState<AdminResourceLink[]>(existing?.resources ?? []);
+  const [subTopics, setSubTopics] = useState<AdminSubTopic[]>(existing?.subTopics ?? []);
+  const [pipelineStatus, setPipelineStatus] = useState<AdminPipelineStatus>(existing?.pipelineStatus ?? "draft");
+  const [adminNotes, setAdminNotes] = useState<string[]>(existing?.adminNotes ?? []);
+  const [tags, setTags] = useState<AdminDayTag[]>(existing?.tags ?? []);
+  const [newNote, setNewNote] = useState("");
   const [showAddResource, setShowAddResource] = useState(false);
   const [editingResource, setEditingResource] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
-  const [generatingQuiz, setGeneratingQuiz] = useState(false);
+  const [activeTab, setActiveTab] = useState<"resources" | "subtopics" | "notes">("resources");
 
-  const phase = PHASES.find(p => p.days.includes(day));
+  const phase = curriculum.phases.find(p => p.dayIds.includes(day)) ?? PHASES.find(p => p.days.includes(day));
 
-  const handleSave = () => {
-    const now = new Date().toISOString();
-    onSave({
-      day,
-      title: title.trim() || `Day ${day}`,
-      description: description.trim(),
-      phase: phase?.id ?? existing?.phase ?? 1,
-      difficulty,
-      estimatedMinutes,
-      topics: topics.split(",").map(t => t.trim()).filter(Boolean),
-      resources,
-      transcript: existing?.transcript,
-      lessonContent: existing?.lessonContent,
-      quizGenerated: existing?.quizGenerated,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    });
-  };
+  const build = (extra?: Partial<AdminDayContent>): AdminDayContent => ({
+    day, title: title.trim() || `Day ${day}`, description: description.trim(),
+    phase: phase?.id ?? 1, difficulty, estimatedMinutes,
+    topics: topics.split(",").map(t => t.trim()).filter(Boolean),
+    resources, subTopics, subDays: existing?.subDays ?? [],
+    pipelineStatus, adminNotes, tags,
+    transcript: existing?.transcript, lessonContent: existing?.lessonContent,
+    quizGenerated: existing?.quizGenerated,
+    createdAt: existing?.createdAt ?? new Date().toISOString(),
+    updatedAt: new Date().toISOString(), ...extra,
+  });
 
-  const handleAddResource = (r: AdminResourceLink) => {
-    setResources(prev => [...prev, r]);
-    setShowAddResource(false);
-  };
-
-  const handleUpdateResource = (r: AdminResourceLink) => {
-    setResources(prev => prev.map(x => x.id === r.id ? r : x));
-    setEditingResource(null);
-  };
-
-  const handleDeleteResource = (id: string) => {
-    setResources(prev => prev.filter(x => x.id !== id));
-    setEditingResource(null);
-  };
-
-  const handleAutoGenerateLesson = async () => {
-    setGenerating(true);
-    try {
-      const res = await fetch("/api/tutor", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "admin_generate_lesson",
-          day,
-          title,
-          topics: topics.split(",").map(t => t.trim()).filter(Boolean),
-          resources,
-        }),
-      });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.lessonContent) {
-          onSave({
-            day,
-            title: title.trim() || `Day ${day}`,
-            description: description.trim(),
-            phase: phase?.id ?? existing?.phase ?? 1,
-            difficulty,
-            estimatedMinutes,
-            topics: topics.split(",").map(t => t.trim()).filter(Boolean),
-            resources,
-            transcript: data.transcript,
-            lessonContent: data.lessonContent,
-            quizGenerated: existing?.quizGenerated,
-            createdAt: existing?.createdAt ?? new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-          });
-        }
-      }
-    } catch (e) {
-      console.error("Failed to generate lesson:", e);
-    } finally {
-      setGenerating(false);
-    }
-  };
+  const handleSave = () => onSave(build());
 
   const handleTranscribeVideos = async () => {
     setGenerating(true);
     try {
-      const youtubeResources = resources.filter(r => r.type === "youtube");
+      const ytR = resources.filter(r => r.type === "youtube");
       let fullTranscript = "";
-      for (const r of youtubeResources) {
-        const videoId = extractYouTubeId(r.url);
-        if (!videoId) continue;
-        const res = await fetch("/api/tutor", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "admin_transcribe_video", videoId, videoTitle: r.title }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          if (data.transcript) {
-            fullTranscript += `\n\n--- Video: ${r.title} ---\n${data.transcript}`;
-          }
-        }
+      for (const r of ytR) {
+        const vid = extractYouTubeId(r.url);
+        if (!vid) continue;
+        const res = await fetch("/api/tutor", { method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "admin_transcribe_video", videoId: vid, videoTitle: r.title }) });
+        if (res.ok) { const d = await res.json(); if (d.transcript) fullTranscript += `\n\n--- ${r.title} ---\n${d.transcript}`; }
       }
-      if (fullTranscript) {
-        const now = new Date().toISOString();
-        onSave({
-          day,
-          title: title.trim() || `Day ${day}`,
-          description: description.trim(),
-          phase: phase?.id ?? existing?.phase ?? 1,
-          difficulty,
-          estimatedMinutes,
-          topics: topics.split(",").map(t => t.trim()).filter(Boolean),
-          resources,
-          transcript: fullTranscript.trim(),
-          lessonContent: existing?.lessonContent,
-          quizGenerated: existing?.quizGenerated,
-          createdAt: existing?.createdAt ?? now,
-          updatedAt: now,
-        });
-      }
-    } catch (e) {
-      console.error("Transcription failed:", e);
-    } finally {
-      setGenerating(false);
-    }
+      if (fullTranscript) { setPipelineStatus("transcribed"); onSave(build({ transcript: fullTranscript.trim() })); }
+    } catch (e) { console.error(e); }
+    setGenerating(false);
+  };
+
+  const handleGenerateLesson = async () => {
+    setGenerating(true);
+    try {
+      const res = await fetch("/api/tutor", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "admin_generate_lesson", day, title, topics: topics.split(",").map(t => t.trim()).filter(Boolean), resources }) });
+      if (res.ok) { const d = await res.json(); if (d.lessonContent) { setPipelineStatus("lesson_generated"); onSave(build({ lessonContent: d.lessonContent, transcript: d.transcript })); } }
+    } catch (e) { console.error(e); }
+    setGenerating(false);
   };
 
   return (
-    <div style={{
-      padding: "16px 18px", borderRadius: 14, border: "1.5px solid var(--brand)",
-      background: "var(--surface)", display: "flex", flexDirection: "column", gap: 14,
-    }}>
+    <div style={{ padding: 18, borderRadius: 14, border: "1.5px solid var(--brand)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 14 }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center",
-            background: "linear-gradient(135deg, var(--brand), var(--brand2))", fontSize: "0.85rem", fontWeight: 800, color: "#fff",
-          }}>
-            {day}
-          </div>
+          <div style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${pipeColor(pipelineStatus)}, ${phase?.color ?? "#6366f1"})`, fontSize: "0.85rem", fontWeight: 800, color: "#fff" }}>{day}</div>
           <div>
-            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text)" }}>Day {day} Content</h3>
-            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-              {phase ? `${phase.icon} ${phase.name}` : "Phase unknown"}
-            </p>
+            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text)" }}>Day {day}</h3>
+            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{phase ? `${phase.icon} ${phase.name}` : "?"} • {PIPELINE_STAGES.find(s => s.key === pipelineStatus)?.icon} {PIPELINE_STAGES.find(s => s.key === pipelineStatus)?.label}</p>
           </div>
         </div>
-        <button onClick={onClose} className="btn-icon"><X size={14} /></button>
+        <div style={{ display: "flex", gap: 6 }}>
+          <button className="btn-secondary sm" onClick={() => setPipelineStatus(nextPipe(pipelineStatus))} style={{ display: "flex", alignItems: "center", gap: 4 }}>Advance →</button>
+          <button onClick={onClose} className="btn-icon"><X size={14} /></button>
+        </div>
       </div>
 
-      {/* Basic Info */}
+      {/* Pipeline bar */}
+      <div style={{ display: "flex", gap: 2, padding: "6px 8px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+        {PIPELINE_STAGES.map((st, i) => (
+          <div key={st.key} style={{ flex: 1, height: 6, borderRadius: 3, background: i <= PIPELINE_STAGES.findIndex(s => s.key === pipelineStatus) ? st.color : "var(--border)", transition: "background 0.3s" }} title={st.label} />
+        ))}
+      </div>
+
+      {/* Tags */}
+      <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+        {ALL_TAGS.map(tag => (
+          <button key={tag.key} onClick={() => setTags(prev => prev.includes(tag.key) ? prev.filter(t => t !== tag.key) : [...prev, tag.key])} style={{
+            padding: "3px 10px", borderRadius: 999, fontSize: "0.68rem", fontWeight: 600,
+            border: `1px solid ${tags.includes(tag.key) ? tag.color : "var(--border)"}`,
+            background: tags.includes(tag.key) ? `${tag.color}20` : "transparent",
+            color: tags.includes(tag.key) ? tag.color : "var(--text-muted)", cursor: "pointer",
+          }}><Tag size={10} /> {tag.label}</button>
+        ))}
+      </div>
+
+      {/* Fields */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <div style={{ gridColumn: "1 / -1" }}>
           <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Title *</label>
-          <input
-            type="text" className="input-field" value={title}
-            onChange={e => setTitle(e.target.value)}
-            placeholder="e.g., Introduction to Variables in Python"
-          />
+          <input type="text" className="input-field" value={title} onChange={e => setTitle(e.target.value)} placeholder="Day title" />
         </div>
         <div>
           <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Difficulty</label>
-          <select
-            className="input-field" value={difficulty}
-            onChange={e => setDifficulty(e.target.value as typeof difficulty)}
-            style={{ cursor: "pointer" }}
-          >
+          <select className="input-field" value={difficulty} onChange={e => setDifficulty(e.target.value as typeof difficulty)}>
             <option value="beginner">🌱 Beginner</option>
             <option value="intermediate">📈 Intermediate</option>
             <option value="advanced">🔥 Advanced</option>
@@ -385,252 +337,398 @@ function DayContentEditor({
         </div>
         <div>
           <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Est. Minutes</label>
-          <input
-            type="number" className="input-field" value={estimatedMinutes}
-            onChange={e => setEstimatedMinutes(Number(e.target.value))}
-            min={5} max={120}
-          />
+          <input type="number" className="input-field" value={estimatedMinutes} onChange={e => setEstimatedMinutes(Number(e.target.value))} min={5} max={120} />
         </div>
         <div style={{ gridColumn: "1 / -1" }}>
           <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Topics (comma separated)</label>
-          <input
-            type="text" className="input-field" value={topics}
-            onChange={e => setTopics(e.target.value)}
-            placeholder="e.g., variables, data types, assignment"
-          />
+          <input type="text" className="input-field" value={topics} onChange={e => setTopics(e.target.value)} placeholder="variables, data types, assignment" />
         </div>
         <div style={{ gridColumn: "1 / -1" }}>
           <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Description</label>
-          <textarea
-            className="input-field" value={description}
-            onChange={e => setDescription(e.target.value)}
-            placeholder="Brief description of this day's content"
-            rows={2}
-            style={{ resize: "vertical" }}
-          />
+          <textarea className="input-field" value={description} onChange={e => setDescription(e.target.value)} placeholder="Brief description" rows={2} style={{ resize: "vertical" }} />
         </div>
       </div>
 
-      {/* Resources Section */}
-      <div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-          <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>
-            📎 Resources ({resources.length})
-          </p>
-          <button
-            className="btn-secondary sm"
-            onClick={() => setShowAddResource(true)}
-          >
-            <Plus size={12} /> Add Link
-          </button>
-        </div>
+      {/* Tabs */}
+      <div style={{ display: "flex", gap: 4, borderBottom: "1px solid var(--border)", paddingBottom: 0 }}>
+        {([ { k: "resources" as const, i: <Link2 size={12} />, l: `Resources (${resources.length})` },
+           { k: "subtopics" as const, i: <Layers size={12} />, l: `Sub-Topics (${subTopics.length})` },
+           { k: "notes" as const, i: <MessageSquare size={12} />, l: `Notes (${adminNotes.length})` },
+        ]).map(t => (
+          <button key={t.k} onClick={() => setActiveTab(t.k)} style={{
+            padding: "8px 14px", borderRadius: "8px 8px 0 0", fontSize: "0.78rem", fontWeight: 600, border: "none",
+            borderBottom: activeTab === t.k ? "2px solid var(--brand)" : "2px solid transparent",
+            background: activeTab === t.k ? "var(--surface2)" : "transparent",
+            color: activeTab === t.k ? "var(--brand)" : "var(--text-muted)", cursor: "pointer", display: "flex", alignItems: "center", gap: 4, fontFamily: "inherit",
+          }}>{t.i} {t.l}</button>
+        ))}
+      </div>
 
-        {/* Resource list */}
+      {/* Resources Tab */}
+      {activeTab === "resources" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", justifyContent: "flex-end" }}>
+            <button className="btn-secondary sm" onClick={() => setShowAddResource(true)}><Plus size={12} /> Add Link</button>
+          </div>
           {resources.map(r => (
             <React.Fragment key={r.id}>
               {editingResource === r.id ? (
-                <ResourceLinkEditor
-                  resource={r}
-                  onSave={handleUpdateResource}
-                  onDelete={() => handleDeleteResource(r.id)}
-                  onCancel={() => setEditingResource(null)}
-                />
+                <ResourceLinkEditor resource={r}
+                  onSave={(u) => { setResources(p => p.map(x => x.id === u.id ? u : x)); setEditingResource(null); }}
+                  onDelete={() => { setResources(p => p.filter(x => x.id !== r.id)); setEditingResource(null); }}
+                  onCancel={() => setEditingResource(null)} />
               ) : (
-                <div
-                  style={{
-                    display: "flex", alignItems: "center", gap: 10, padding: "10px 12px",
-                    borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)",
-                    cursor: "pointer", transition: "all 0.15s",
-                  }}
-                  onClick={() => setEditingResource(r.id)}
-                >
+                <div onClick={() => setEditingResource(r.id)} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface2)", cursor: "pointer" }}>
                   {r.type === "youtube" ? (
-                    r.thumbnailUrl ? (
-                      <img src={r.thumbnailUrl} alt="" style={{ width: 48, height: 32, borderRadius: 6, objectFit: "cover" }} />
-                    ) : (
-                      <div style={{ width: 48, height: 32, borderRadius: 6, background: "rgba(239,68,68,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                        <Youtube size={14} style={{ color: "#ef4444" }} />
-                      </div>
-                    )
+                    r.thumbnailUrl ? <img src={r.thumbnailUrl} alt="" style={{ width: 48, height: 32, borderRadius: 6, objectFit: "cover" }} />
+                    : <div style={{ width: 48, height: 32, borderRadius: 6, background: "rgba(239,68,68,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}><Youtube size={14} style={{ color: "#ef4444" }} /></div>
                   ) : r.type === "blog" ? (
-                    <div style={{ width: 48, height: 32, borderRadius: 6, background: "rgba(99,102,241,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <FileText size={14} style={{ color: "var(--brand)" }} />
-                    </div>
+                    <div style={{ width: 48, height: 32, borderRadius: 6, background: "rgba(99,102,241,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}><FileText size={14} style={{ color: "var(--brand)" }} /></div>
                   ) : (
-                    <div style={{ width: 48, height: 32, borderRadius: 6, background: "rgba(6,182,212,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                      <Globe size={14} style={{ color: "var(--cyan)" }} />
-                    </div>
+                    <div style={{ width: 48, height: 32, borderRadius: 6, background: "rgba(6,182,212,0.15)", display: "flex", alignItems: "center", justifyContent: "center" }}><Globe size={14} style={{ color: "var(--cyan)" }} /></div>
                   )}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {r.title}
-                    </p>
-                    <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {r.url}
-                    </p>
+                    <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.title}</p>
+                    <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.url}</p>
                   </div>
-                  <span className={`badge ${r.type === "youtube" ? "badge-red" : r.type === "blog" ? "badge-purple" : "badge-cyan"}`}>
-                    {r.type}
-                  </span>
+                  <span className={`badge ${r.type === "youtube" ? "badge-red" : r.type === "blog" ? "badge-purple" : "badge-cyan"}`}>{r.type}</span>
                   <Edit3 size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
                 </div>
               )}
             </React.Fragment>
           ))}
-
-          {showAddResource && (
-            <ResourceLinkEditor
-              onSave={handleAddResource}
-              onCancel={() => setShowAddResource(false)}
-            />
-          )}
-
+          {showAddResource && <ResourceLinkEditor onSave={(r) => { setResources(p => [...p, r]); setShowAddResource(false); if (pipelineStatus === "draft") setPipelineStatus("resources_added"); }} onCancel={() => setShowAddResource(false)} />}
           {resources.length === 0 && !showAddResource && (
-            <div style={{
-              padding: "20px 16px", borderRadius: 10, border: "1.5px dashed var(--border)",
-              textAlign: "center", color: "var(--text-muted)", fontSize: "0.82rem",
-            }}>
+            <div style={{ padding: 20, borderRadius: 10, border: "1.5px dashed var(--border)", textAlign: "center", color: "var(--text-muted)", fontSize: "0.82rem" }}>
               <Link2 size={20} style={{ margin: "0 auto 8px", opacity: 0.5 }} />
-              <p>No resources added yet.</p>
-              <p style={{ fontSize: "0.72rem", marginTop: 4 }}>Add YouTube videos, blogs, or web links for this day.</p>
+              <p>No resources yet. Paste a URL and click Auto-Fill!</p>
             </div>
           )}
         </div>
-      </div>
+      )}
 
-      {/* AI Actions */}
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <button
-          className="btn-primary sm"
-          onClick={handleTranscribeVideos}
-          disabled={generating || resources.filter(r => r.type === "youtube").length === 0}
-          style={{ opacity: resources.filter(r => r.type === "youtube").length === 0 ? 0.5 : 1 }}
-        >
-          {generating ? <Loader2 size={12} className="animate-spin" /> : <Brain size={12} />}
-          Transcribe Videos
-        </button>
-        <button
-          className="btn-secondary sm"
-          onClick={handleAutoGenerateLesson}
-          disabled={generating}
-        >
-          {generating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-          Generate Lesson (AI)
-        </button>
-      </div>
+      {/* Sub-Topics Tab */}
+      {activeTab === "subtopics" && <SubTopicEditor subTopics={subTopics} onChange={setSubTopics} />}
 
-      {/* Transcript preview */}
-      {existing?.transcript && (
-        <div style={{ padding: "12px 14px", borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)" }}>
-          <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 6 }}>
-            📝 Transcript ({existing.transcript.length} chars)
-          </p>
-          <div style={{ maxHeight: 120, overflowY: "auto", fontSize: "0.78rem", color: "var(--text2)", lineHeight: 1.6 }}>
-            {existing.transcript.slice(0, 500)}...
+      {/* Notes Tab */}
+      {activeTab === "notes" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <input className="input-field" style={{ flex: 1 }} placeholder="Add a note, reminder..." value={newNote} onChange={e => setNewNote(e.target.value)} onKeyDown={e => e.key === "Enter" && newNote.trim() && (setAdminNotes(p => [...p, newNote.trim()]), setNewNote(""))} />
+            <button className="btn-primary sm" onClick={() => { if (newNote.trim()) { setAdminNotes(p => [...p, newNote.trim()]); setNewNote(""); } }} disabled={!newNote.trim()}><Plus size={12} /></button>
           </div>
+          {adminNotes.map((n, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+              <MessageSquare size={12} style={{ color: "var(--brand)", flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: "0.78rem", color: "var(--text)" }}>{n}</span>
+              <button onClick={() => setAdminNotes(p => p.filter((_, j) => j !== i))} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--red)" }}><X size={12} /></button>
+            </div>
+          ))}
+          {adminNotes.length === 0 && <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", textAlign: "center", padding: 12 }}>No notes yet. Add reminders like "Skip to 2:30" or "Needs Hindi video".</p>}
         </div>
       )}
 
-      {/* Lesson preview */}
+      {/* AI Actions */}
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <button className="btn-primary sm" onClick={handleTranscribeVideos} disabled={generating || !resources.some(r => r.type === "youtube")}>
+          {generating ? <Loader2 size={12} className="animate-spin" /> : <Brain size={12} />} Transcribe Videos
+        </button>
+        <button className="btn-secondary sm" onClick={handleGenerateLesson} disabled={generating}>
+          {generating ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Generate Lesson (AI)
+        </button>
+      </div>
+
+      {/* Previews */}
+      {existing?.transcript && (
+        <div style={{ padding: 12, borderRadius: 10, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+          <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 6 }}>📝 Transcript ({existing.transcript.length} chars)</p>
+          <div style={{ maxHeight: 100, overflowY: "auto", fontSize: "0.78rem", color: "var(--text2)", lineHeight: 1.6 }}>{existing.transcript.slice(0, 500)}...</div>
+        </div>
+      )}
       {existing?.lessonContent && (
-        <div style={{ padding: "12px 14px", borderRadius: 10, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.3)" }}>
-          <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--green)", marginBottom: 6 }}>
-            ✅ Lesson Content Generated ({existing.lessonContent.length} chars)
-          </p>
-          <div style={{ maxHeight: 120, overflowY: "auto", fontSize: "0.78rem", color: "var(--text2)", lineHeight: 1.6 }}>
-            {existing.lessonContent.slice(0, 500)}...
-          </div>
+        <div style={{ padding: 12, borderRadius: 10, background: "rgba(16,185,129,0.08)", border: "1px solid rgba(16,185,129,0.3)" }}>
+          <p style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--green)", marginBottom: 6 }}>✅ Lesson ({existing.lessonContent.length} chars)</p>
+          <div style={{ maxHeight: 100, overflowY: "auto", fontSize: "0.78rem", color: "var(--text2)", lineHeight: 1.6 }}>{existing.lessonContent.slice(0, 500)}...</div>
         </div>
       )}
 
       {/* Save */}
       <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
         <button onClick={onClose} className="btn-secondary sm">Cancel</button>
-        <button onClick={handleSave} className="btn-primary sm">
-          <Save size={12} /> Save Day {day}
+        <button onClick={handleSave} className="btn-primary sm"><Save size={12} /> Save Day {day}</button>
+      </div>
+    </div>
+  );
+}
+
+// ── Phase Manager ─────────────────────────────────────────────────────────
+function PhaseManager({ curriculum, onPhasesChange }: { curriculum: AdminCurriculumState; onPhasesChange: (p: AdminPhase[]) => void }) {
+  const [showAdd, setShowAdd] = useState(false);
+  const [name, setName] = useState(""); const [icon, setIcon] = useState("📚");
+  const [desc, setDesc] = useState(""); const [color, setColor] = useState("#6366f1");
+
+  const handleAdd = () => {
+    if (!name.trim()) return;
+    const maxId = Math.max(0, ...curriculum.phases.map(p => p.id));
+    onPhasesChange([...curriculum.phases, { id: maxId + 1, name: name.trim(), icon, description: desc.trim(), order: maxId + 1, color, dayIds: [], createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }]);
+    setName(""); setDesc(""); setShowAdd(false);
+  };
+
+  const handleMove = (id: number, dir: "up" | "down") => {
+    const sorted = [...curriculum.phases].sort((a, b) => a.order - b.order);
+    const idx = sorted.findIndex(p => p.id === id);
+    if (dir === "up" && idx > 0) [sorted[idx].order, sorted[idx - 1].order] = [sorted[idx - 1].order, sorted[idx].order];
+    else if (dir === "down" && idx < sorted.length - 1) [sorted[idx].order, sorted[idx + 1].order] = [sorted[idx + 1].order, sorted[idx].order];
+    onPhasesChange(sorted);
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)" }}>📂 Manage Phases</h2>
+        <button className="btn-primary sm" onClick={() => setShowAdd(true)}><Plus size={12} /> Add Phase</button>
+      </div>
+      {[...curriculum.phases].sort((a, b) => a.order - b.order).map(phase => (
+        <div key={phase.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10, border: `1.5px solid ${phase.color ?? "var(--border)"}`, background: "var(--surface)", marginBottom: 8 }}>
+          <span style={{ fontSize: "1.4rem" }}>{phase.icon}</span>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)" }}>Phase {phase.id}: {phase.name}</p>
+            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{phase.dayIds.length} days • {phase.description}</p>
+          </div>
+          <div style={{ display: "flex", gap: 4 }}>
+            <button onClick={() => handleMove(phase.id, "up")} className="btn-icon" style={{ width: 28, height: 28 }}><ArrowUp size={12} /></button>
+            <button onClick={() => handleMove(phase.id, "down")} className="btn-icon" style={{ width: 28, height: 28 }}><ArrowDown size={12} /></button>
+            <button onClick={() => { if (confirm(`Delete Phase ${phase.id}?`)) onPhasesChange(curriculum.phases.filter(p => p.id !== phase.id)); }} className="btn-icon" style={{ width: 28, height: 28, color: "var(--red)" }}><Trash2 size={12} /></button>
+          </div>
+        </div>
+      ))}
+      {showAdd && (
+        <div style={{ padding: 16, borderRadius: 12, border: "1.5px solid var(--brand)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 10 }}>
+          <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)" }}>Add New Phase</p>
+          <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 8 }}>
+            <input className="input-field" placeholder="📚" value={icon} onChange={e => setIcon(e.target.value)} style={{ textAlign: "center" }} />
+            <input className="input-field" placeholder="Phase name" value={name} onChange={e => setName(e.target.value)} autoFocus />
+          </div>
+          <input className="input-field" placeholder="Description" value={desc} onChange={e => setDesc(e.target.value)} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>Color:</label>
+            <input type="color" value={color} onChange={e => setColor(e.target.value)} style={{ width: 32, height: 32, border: "none", borderRadius: 6, cursor: "pointer" }} />
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button className="btn-secondary sm" onClick={() => setShowAdd(false)}>Cancel</button>
+            <button className="btn-primary sm" onClick={handleAdd} disabled={!name.trim()}>Create</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Curriculum Generator ──────────────────────────────────────────────────
+function CurriculumGenerator({ onGenerate, generating }: { onGenerate: (t: string, topics: string[], d: string) => void; generating: boolean }) {
+  const [title, setTitle] = useState(""); const [topics, setTopics] = useState(""); const [desc, setDesc] = useState("");
+  return (
+    <div>
+      <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 12 }}>🤖 AI Curriculum Generator</h2>
+      <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>Type a topic and AI generates an entire curriculum with phases, days, sub-days, topics, and learning objectives.</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 600 }}>
+        <div>
+          <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Topic / Course Title *</label>
+          <input className="input-field" value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g., Python Programming" autoFocus />
+        </div>
+        <div>
+          <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Topics to cover (optional)</label>
+          <input className="input-field" value={topics} onChange={e => setTopics(e.target.value)} placeholder="e.g., variables, loops, functions" />
+        </div>
+        <div>
+          <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Description (optional)</label>
+          <textarea className="input-field" value={desc} onChange={e => setDesc(e.target.value)} placeholder="Course goals and audience" rows={2} style={{ resize: "vertical" }} />
+        </div>
+        <button className="btn-primary" onClick={() => onGenerate(title, topics.split(",").map(t => t.trim()).filter(Boolean), desc)} disabled={!title.trim() || generating} style={{ alignSelf: "flex-start" }}>
+          {generating ? <><Loader2 size={14} className="animate-spin" /> Generating...</> : <><Sparkles size={14} /> Generate Full Curriculum</>}
         </button>
       </div>
     </div>
   );
 }
 
-// ── Main Admin Panel ──────────────────────────────────────────────────────────
+// ── Pipeline View ─────────────────────────────────────────────────────────
+function PipelineView({ curriculum, onSelectDay }: { curriculum: AdminCurriculumState; onSelectDay: (d: number) => void }) {
+  const managed = Object.values(curriculum.days);
+  return (
+    <div>
+      <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 16 }}>📋 Content Pipeline</h2>
+      <div style={{ display: "grid", gridTemplateColumns: `repeat(${PIPELINE_STAGES.length}, 1fr)`, gap: 8, overflowX: "auto" }}>
+        {PIPELINE_STAGES.map(stage => {
+          const days = managed.filter(d => d.pipelineStatus === stage.key);
+          return (
+            <div key={stage.key} style={{ minWidth: 130 }}>
+              <div style={{ padding: "8px 10px", borderRadius: "8px 8px 0 0", background: `${stage.color}20`, border: `1px solid ${stage.color}40`, borderBottom: "none" }}>
+                <p style={{ fontSize: "0.72rem", fontWeight: 700, color: stage.color }}>{stage.icon} {stage.label}</p>
+                <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{days.length} days</p>
+              </div>
+              <div style={{ padding: 6, borderRadius: "0 0 8px 8px", border: `1px solid ${stage.color}30`, background: "var(--surface2)", minHeight: 80, display: "flex", flexDirection: "column", gap: 4 }}>
+                {days.map(d => (
+                  <button key={d.day} onClick={() => onSelectDay(d.day)} style={{ padding: "6px 8px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--surface)", cursor: "pointer", textAlign: "left", fontFamily: "inherit", width: "100%" }}>
+                    <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text)" }}>Day {d.day}</p>
+                    <p style={{ fontSize: "0.65rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.title}</p>
+                  </button>
+                ))}
+                {days.length === 0 && <p style={{ fontSize: "0.65rem", color: "var(--text-muted)", textAlign: "center", padding: 8 }}>Empty</p>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Model Test Panel ──────────────────────────────────────────────────────
+function ModelTestPanel() {
+  const modelEntries = Object.entries(MODELS) as [string, ModelId][];
+  const [sel, setSel] = useState<ModelId>(modelEntries[0]?.[1] ?? "");
+  const [prompt, setPrompt] = useState("Explain what a variable is in Python in 2 sentences.");
+  const [results, setResults] = useState<AdminModelTest[]>([]);
+  const [testing, setTesting] = useState(false);
+
+  const handleTest = async () => {
+    if (!sel || testing) return;
+    setTesting(true);
+    try {
+      const res = await fetch("/api/tutor", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "admin_test_model", model: sel, message: prompt }) });
+      const data = await res.json();
+      setResults(prev => [{ ...data, prompt }, ...prev].slice(0, 20));
+    } catch { setResults(prev => [{ modelId: sel, prompt, success: false, error: "Network error" }, ...prev].slice(0, 20)); }
+    setTesting(false);
+  };
+
+  return (
+    <div>
+      <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 12 }}>🧪 Test AI Models</h2>
+      <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>Test any AI model to verify it works.</p>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 600 }}>
+        <div>
+          <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Model</label>
+          <select className="input-field" value={sel} onChange={e => setSel(e.target.value as ModelId)}>
+            {modelEntries.map(([key, val]) => (
+              <option key={val} value={val}>{MODEL_INFO[val]?.name ?? key} ({val})</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Test Prompt</label>
+          <textarea className="input-field" value={prompt} onChange={e => setPrompt(e.target.value)} rows={2} style={{ resize: "vertical" }} />
+        </div>
+        <button className="btn-primary" onClick={handleTest} disabled={!sel || testing} style={{ alignSelf: "flex-start" }}>
+          {testing ? <><Loader2 size={14} className="animate-spin" /> Testing...</> : <><TestTube2 size={14} /> Run Test</>}
+        </button>
+      </div>
+      <div style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 8 }}>
+        {results.map((r, i) => (
+          <div key={i} style={{ padding: 12, borderRadius: 10, border: `1px solid ${r.success ? "rgba(16,185,129,0.3)" : "rgba(239,68,68,0.3)"}`, background: r.success ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+              {r.success ? <CheckCircle2 size={14} style={{ color: "var(--green)" }} /> : <AlertCircle size={14} style={{ color: "var(--red)" }} />}
+              <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text)" }}>{r.modelId}</span>
+              {r.latencyMs && <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{r.latencyMs}ms</span>}
+            </div>
+            {r.response && <p style={{ fontSize: "0.78rem", color: "var(--text2)", lineHeight: 1.5 }}>{r.response}</p>}
+            {r.error && <p style={{ fontSize: "0.78rem", color: "var(--red)" }}>Error: {r.error}</p>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Main Admin Panel ──────────────────────────────────────────────────────
 export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const [curriculum, setCurriculum] = useState<AdminCurriculumState>(loadAdminCurriculum);
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [expandedPhase, setExpandedPhase] = useState<number | null>(1);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeSection, setActiveSection] = useState<"days" | "overview" | "export">("days");
+  const [activeSection, setActiveSection] = useState<"days" | "phases" | "pipeline" | "generator" | "test" | "export">("days");
+  const [generatingCurriculum, setGeneratingCurriculum] = useState(false);
 
-  // Save on every change
-  useEffect(() => {
-    saveAdminCurriculum(curriculum);
-  }, [curriculum]);
+  useEffect(() => { saveAdminCurriculum(curriculum); }, [curriculum]);
 
-  const handleSaveDayContent = useCallback((content: AdminDayContent) => {
-    setCurriculum(prev => ({
-      ...prev,
-      days: { ...prev.days, [content.day]: content },
-    }));
-    setSelectedDay(null);
-  }, []);
-
-  const handleDeleteDay = useCallback((day: number) => {
-    if (!confirm(`Delete all content for Day ${day}?`)) return;
-    setCurriculum(prev => {
-      const newDays = { ...prev.days };
-      delete newDays[day];
-      return { ...prev, days: newDays };
-    });
+  const handleSaveDay = useCallback((content: AdminDayContent) => {
+    setCurriculum(prev => ({ ...prev, days: { ...prev.days, [content.day]: content } }));
     setSelectedDay(null);
   }, []);
 
   const handleExport = () => {
-    const data = JSON.stringify(curriculum, null, 2);
-    const blob = new Blob([data], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(curriculum, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `csa-admin-curriculum-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const a = document.createElement("a"); a.href = url;
+    a.download = `csa-curriculum-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click(); URL.revokeObjectURL(url);
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]; if (!file) return;
     const reader = new FileReader();
-    reader.onload = ev => {
-      try {
-        const data = JSON.parse(ev.target?.result as string) as AdminCurriculumState;
-        setCurriculum(data);
-      } catch { alert("Invalid curriculum file"); }
-    };
-    reader.readAsText(file);
-    e.target.value = "";
+    reader.onload = ev => { try { setCurriculum(JSON.parse(ev.target?.result as string)); } catch { alert("Invalid file"); } };
+    reader.readAsText(file); e.target.value = "";
+  };
+
+  const handleGenerateFullCurriculum = async (title: string, topics: string[], description: string) => {
+    setGeneratingCurriculum(true);
+    try {
+      const res = await fetch("/api/tutor", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "admin_generate_full_curriculum", title, topics, description }) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.phases && Array.isArray(data.phases)) {
+          const newDays: Record<number, AdminDayContent> = {};
+          const newPhases: AdminPhase[] = data.phases.map((p: any, i: number) => {
+            const dayIds: number[] = [];
+            (p.days ?? []).forEach((d: any) => {
+              dayIds.push(d.day);
+              newDays[d.day] = {
+                day: d.day, title: d.title, description: d.description ?? "",
+                phase: p.id ?? i + 1, difficulty: d.difficulty ?? "beginner",
+                estimatedMinutes: d.estimatedMinutes ?? 30, topics: d.topics ?? [],
+                resources: [], subTopics: (d.subTopics ?? []).map((st: any) => ({
+                  id: genId(), name: st.name, description: st.description ?? "",
+                  objectives: st.objectives ?? [], resources: [], order: 0,
+                })),
+                subDays: [], pipelineStatus: "draft", adminNotes: [], tags: [],
+                createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+              };
+            });
+            return {
+              id: p.id ?? i + 1, name: p.name, icon: p.icon ?? "📚",
+              description: p.description ?? "", order: i + 1,
+              color: p.color ?? `hsl(${i * 40}, 60%, 55%)`, dayIds,
+              createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
+            };
+          });
+          setCurriculum(prev => ({
+            ...prev,
+            phases: [...prev.phases.filter(p => !newPhases.some(np => np.id === p.id)), ...newPhases],
+            days: { ...prev.days, ...newDays },
+          }));
+          setActiveSection("days");
+        }
+      }
+    } catch (e) { console.error(e); }
+    setGeneratingCurriculum(false);
   };
 
   const managedDays = Object.keys(curriculum.days).map(Number).sort((a, b) => a - b);
   const totalResources = managedDays.reduce((sum, d) => sum + (curriculum.days[d]?.resources?.length ?? 0), 0);
   const filteredDays = managedDays.filter(d => {
     if (!searchQuery) return true;
-    const content = curriculum.days[d];
-    return content?.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-           content?.topics?.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
+    const c = curriculum.days[d];
+    return c?.title.toLowerCase().includes(searchQuery.toLowerCase()) || c?.topics?.some(t => t.toLowerCase().includes(searchQuery.toLowerCase()));
   });
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 200, display: "flex",
-      background: "var(--bg)", overflow: "hidden",
-    }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", background: "var(--bg)", overflow: "hidden" }}>
       {/* Sidebar */}
-      <div style={{
-        width: 260, borderRight: "1px solid var(--border)", background: "var(--surface)",
-        display: "flex", flexDirection: "column", flexShrink: 0,
-      }}>
-        {/* Logo */}
+      <div style={{ width: 260, borderRight: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
         <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border)" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
             <Shield size={18} style={{ color: "var(--brand)" }} />
@@ -638,12 +736,10 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
           </div>
           <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Manage curriculum & content</p>
         </div>
-
-        {/* Stats */}
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <div style={{ padding: "8px 10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
-              <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Days Managed</p>
+              <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Days</p>
               <p style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--brand)" }}>{managedDays.length}</p>
             </div>
             <div style={{ padding: "8px 10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
@@ -652,131 +748,75 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         </div>
-
-        {/* Nav */}
         <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
           {([
             { id: "days" as const, icon: <BookOpen size={15} />, label: "Manage Days" },
-            { id: "overview" as const, icon: <Eye size={15} />, label: "Overview" },
+            { id: "phases" as const, icon: <Layers size={15} />, label: "Manage Phases" },
+            { id: "pipeline" as const, icon: <Route size={15} />, label: "Pipeline View" },
+            { id: "generator" as const, icon: <Sparkles size={15} />, label: "AI Generator" },
+            { id: "test" as const, icon: <TestTube2 size={15} />, label: "Model Test" },
             { id: "export" as const, icon: <Download size={15} />, label: "Import / Export" },
           ]).map(item => (
-            <button
-              key={item.id}
-              onClick={() => setActiveSection(item.id)}
-              style={{
-                display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
-                borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.82rem", fontWeight: 600,
-                background: activeSection === item.id ? "var(--brand-glow)" : "transparent",
-                color: activeSection === item.id ? "var(--brand2)" : "var(--text-muted)",
-                transition: "all 0.15s", fontFamily: "inherit", textAlign: "left", width: "100%",
-              }}
-            >
-              {item.icon} {item.label}
-            </button>
+            <button key={item.id} onClick={() => setActiveSection(item.id)} style={{
+              display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.82rem", fontWeight: 600,
+              background: activeSection === item.id ? "var(--brand-glow)" : "transparent",
+              color: activeSection === item.id ? "var(--brand2)" : "var(--text-muted)", transition: "all 0.15s", fontFamily: "inherit", textAlign: "left", width: "100%",
+            }}>{item.icon} {item.label}</button>
           ))}
         </div>
-
         <div style={{ flex: 1 }} />
-
-        {/* Close */}
         <div style={{ padding: "14px 18px", borderTop: "1px solid var(--border)" }}>
-          <button onClick={onClose} className="btn-secondary" style={{ width: "100%", justifyContent: "center" }}>
-            ← Back to Academy
-          </button>
+          <button onClick={onClose} className="btn-secondary" style={{ width: "100%", justifyContent: "center" }}>← Back to Academy</button>
         </div>
       </div>
 
-      {/* Main content */}
+      {/* Main Content */}
       <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
         {activeSection === "days" && (
           <div style={{ maxWidth: 800, margin: "0 auto" }}>
-            {/* Search */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ position: "relative" }}>
-                <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-                <input
-                  type="text"
-                  className="input-field"
-                  placeholder="Search days by title or topic..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  style={{ paddingLeft: 36 }}
-                />
-              </div>
+            <div style={{ marginBottom: 16, position: "relative" }}>
+              <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
+              <input type="text" className="input-field" placeholder="Search days by title or topic..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ paddingLeft: 36 }} />
             </div>
-
-            {/* Phase groups */}
-            {PHASES.map(phase => {
-              const phaseDays = phase.days.filter(d => filteredDays.includes(d) || (!searchQuery && !curriculum.days[d]));
+            {curriculum.phases.sort((a, b) => a.order - b.order).map(phase => {
+              const phaseDays = phase.dayIds.filter(d => filteredDays.includes(d) || (!searchQuery && !curriculum.days[d]));
               if (phaseDays.length === 0 && searchQuery) return null;
               const isExpanded = expandedPhase === phase.id;
-
+              const published = phaseDays.filter(d => curriculum.days[d]?.pipelineStatus === "published").length;
               return (
                 <div key={phase.id} style={{ marginBottom: 12 }}>
-                  <button
-                    onClick={() => setExpandedPhase(isExpanded ? null : phase.id)}
-                    style={{
-                      width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px",
-                      borderRadius: 10, border: "1px solid var(--border)",
-                      background: isExpanded ? "var(--surface2)" : "var(--surface)",
-                      cursor: "pointer", transition: "all 0.15s", fontFamily: "inherit",
-                    }}
-                  >
+                  <button onClick={() => setExpandedPhase(isExpanded ? null : phase.id)} style={{
+                    width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10,
+                    border: `1px solid ${isExpanded ? (phase.color ?? "var(--brand)") : "var(--border)"}`,
+                    background: isExpanded ? "var(--surface2)" : "var(--surface)", cursor: "pointer", fontFamily: "inherit",
+                  }}>
                     <span style={{ fontSize: "1.2rem" }}>{phase.icon}</span>
                     <div style={{ flex: 1, textAlign: "left" }}>
-                      <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)" }}>
-                        Phase {phase.id}: {phase.name}
-                      </p>
-                      <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                        Days {phase.days[0]}-{phase.days[phase.days.length - 1]} • {phase.days.length} days
-                      </p>
+                      <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)" }}>Phase {phase.id}: {phase.name}</p>
+                      <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{phase.dayIds.length} days</p>
                     </div>
-                    <span className="badge badge-purple">
-                      {phase.days.filter(d => curriculum.days[d]).length}/{phase.days.length}
-                    </span>
-                    <ChevronRight size={14} style={{
-                      color: "var(--text-muted)", transition: "transform 0.2s",
-                      transform: isExpanded ? "rotate(90deg)" : "none",
-                    }} />
+                    <span className="badge badge-purple">{published}/{phase.dayIds.length}</span>
+                    <ChevronRight size={14} style={{ color: "var(--text-muted)", transition: "transform 0.2s", transform: isExpanded ? "rotate(90deg)" : "none" }} />
                   </button>
-
                   {isExpanded && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))", gap: 8, padding: "10px 4px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8, padding: "10px 4px" }}>
                       {phaseDays.map(day => {
                         const content = curriculum.days[day];
-                        const isSelected = selectedDay === day;
-                        const hasContent = !!content;
-
+                        const isSel = selectedDay === day;
+                        const has = !!content;
+                        const sc = has ? pipeColor(content.pipelineStatus) : "var(--border)";
                         return (
-                          <button
-                            key={day}
-                            onClick={() => setSelectedDay(isSelected ? null : day)}
-                            style={{
-                              padding: "10px 12px", borderRadius: 10, textAlign: "left",
-                              border: `1.5px solid ${isSelected ? "var(--brand)" : hasContent ? "var(--green)" : "var(--border)"}`,
-                              background: isSelected ? "var(--brand-glow)" : hasContent ? "rgba(16,185,129,0.08)" : "var(--surface)",
-                              cursor: "pointer", transition: "all 0.15s", fontFamily: "inherit",
-                            }}
-                          >
+                          <button key={day} onClick={() => setSelectedDay(isSel ? null : day)} style={{
+                            padding: "10px 12px", borderRadius: 10, textAlign: "left",
+                            border: `1.5px solid ${isSel ? "var(--brand)" : sc}`,
+                            background: isSel ? "var(--brand-glow)" : has ? `${sc}08` : "var(--surface)", cursor: "pointer", fontFamily: "inherit",
+                          }}>
                             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
                               <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text)" }}>Day {day}</span>
-                              {hasContent ? (
-                                <CheckCircle2 size={12} style={{ color: "var(--green)" }} />
-                              ) : (
-                                <Plus size={12} style={{ color: "var(--text-muted)" }} />
-                              )}
+                              {has ? <span style={{ fontSize: "0.6rem", padding: "2px 6px", borderRadius: 999, background: `${sc}20`, color: sc, fontWeight: 600 }}>{PIPELINE_STAGES.find(s => s.key === content.pipelineStatus)?.icon}</span> : <Plus size={12} style={{ color: "var(--text-muted)" }} />}
                             </div>
-                            <p style={{
-                              fontSize: "0.7rem", color: "var(--text-muted)", lineHeight: 1.3,
-                              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-                            }}>
-                              {content?.title ?? getLessonByDay(day)?.title ?? "Click to add"}
-                            </p>
-                            {hasContent && content.resources.length > 0 && (
-                              <p style={{ fontSize: "0.65rem", color: "var(--cyan)", marginTop: 3 }}>
-                                📎 {content.resources.length} resource{content.resources.length !== 1 ? "s" : ""}
-                              </p>
-                            )}
+                            <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{content?.title ?? getLessonByDay(day)?.title ?? "Click to add"}</p>
+                            {has && content.resources.length > 0 && <p style={{ fontSize: "0.65rem", color: "var(--cyan)", marginTop: 3 }}>📎 {content.resources.length}</p>}
                           </button>
                         );
                       })}
@@ -787,94 +827,23 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             })}
           </div>
         )}
-
-        {activeSection === "overview" && (
-          <div style={{ maxWidth: 800, margin: "0 auto" }}>
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 16 }}>
-              📊 Curriculum Overview
-            </h2>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
-              {[
-                { label: "Total Days Managed", value: managedDays.length, color: "var(--brand)" },
-                { label: "Total Resources", value: totalResources, color: "var(--cyan)" },
-                { label: "YouTube Videos", value: managedDays.reduce((s, d) => s + (curriculum.days[d]?.resources?.filter(r => r.type === "youtube").length ?? 0), 0), color: "#ef4444" },
-                { label: "Blog/Web Links", value: managedDays.reduce((s, d) => s + (curriculum.days[d]?.resources?.filter(r => r.type !== "youtube").length ?? 0), 0), color: "var(--brand)" },
-                { label: "Lessons Generated", value: managedDays.filter(d => curriculum.days[d]?.lessonContent).length, color: "var(--green)" },
-                { label: "Transcripts Ready", value: managedDays.filter(d => curriculum.days[d]?.transcript).length, color: "var(--amber)" },
-              ].map(stat => (
-                <div key={stat.label} style={{
-                  padding: "14px 16px", borderRadius: 12, background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                }}>
-                  <p style={{ fontSize: "0.72rem", color: "var(--text-muted)", marginBottom: 4 }}>{stat.label}</p>
-                  <p style={{ fontSize: "1.5rem", fontWeight: 800, color: stat.color }}>{stat.value}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Recent days */}
-            <h3 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>Recent Activity</h3>
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {managedDays.slice(-10).reverse().map(d => {
-                const content = curriculum.days[d];
-                return (
-                  <div key={d} style={{
-                    display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
-                    borderRadius: 10, background: "var(--surface)", border: "1px solid var(--border)",
-                  }}>
-                    <div style={{
-                      width: 32, height: 32, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
-                      background: "var(--brand-glow)", fontSize: "0.8rem", fontWeight: 800, color: "var(--brand)",
-                    }}>{d}</div>
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text)" }}>{content.title}</p>
-                      <p style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
-                        {content.resources.length} resources • Updated {new Date(content.updatedAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <button className="btn-secondary sm" onClick={() => { setSelectedDay(d); setActiveSection("days"); }}>
-                      Edit
-                    </button>
-                  </div>
-                );
-              })}
-              {managedDays.length === 0 && (
-                <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
-                  <BookOpen size={32} style={{ margin: "0 auto 12px", opacity: 0.3 }} />
-                  <p>No days managed yet. Start by adding content to Day 1!</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
+        {activeSection === "phases" && <div style={{ maxWidth: 800, margin: "0 auto" }}><PhaseManager curriculum={curriculum} onPhasesChange={(phases) => setCurriculum(prev => ({ ...prev, phases }))} /></div>}
+        {activeSection === "pipeline" && <div style={{ maxWidth: 1200, margin: "0 auto" }}><PipelineView curriculum={curriculum} onSelectDay={(d) => { setSelectedDay(d); setActiveSection("days"); }} /></div>}
+        {activeSection === "generator" && <div style={{ maxWidth: 800, margin: "0 auto" }}><CurriculumGenerator onGenerate={handleGenerateFullCurriculum} generating={generatingCurriculum} /></div>}
+        {activeSection === "test" && <div style={{ maxWidth: 800, margin: "0 auto" }}><ModelTestPanel /></div>}
         {activeSection === "export" && (
           <div style={{ maxWidth: 600, margin: "0 auto" }}>
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 16 }}>
-              📦 Import / Export
-            </h2>
-
+            <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 16 }}>📦 Import / Export</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ padding: "16px 18px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
-                <h3 style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Export Curriculum</h3>
-                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 12 }}>
-                  Download all your managed days, resources, and generated content as a JSON file.
-                </p>
-                <button className="btn-primary sm" onClick={handleExport}>
-                  <Download size={12} /> Export ({managedDays.length} days)
-                </button>
+              <div style={{ padding: 18, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+                <h3 style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Export</h3>
+                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 12 }}>Download all days, phases, resources, and content as JSON.</p>
+                <button className="btn-primary sm" onClick={handleExport}><Download size={12} /> Export ({managedDays.length} days)</button>
               </div>
-
-              <div style={{ padding: "16px 18px", borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
-                <h3 style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Import Curriculum</h3>
-                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 12 }}>
-                  Upload a previously exported curriculum JSON file.
-                </p>
-                <label className="btn-secondary sm" style={{ cursor: "pointer" }}>
-                  <Upload size={12} /> Import File
-                  <input type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} />
-                </label>
+              <div style={{ padding: 18, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+                <h3 style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Import</h3>
+                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 12 }}>Upload a previously exported JSON file.</p>
+                <label className="btn-secondary sm" style={{ cursor: "pointer" }}><Upload size={12} /> Import File<input type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} /></label>
               </div>
             </div>
           </div>
@@ -883,18 +852,9 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
 
       {/* Day Editor Modal */}
       {selectedDay !== null && (
-        <div style={{
-          position: "fixed", inset: 0, zIndex: 210, display: "flex",
-          alignItems: "center", justifyContent: "center", padding: 20,
-          background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)",
-        }}>
-          <div style={{ width: "100%", maxWidth: 640, maxHeight: "90vh", overflowY: "auto" }}>
-            <DayContentEditor
-              day={selectedDay}
-              existing={curriculum.days[selectedDay]}
-              onSave={handleSaveDayContent}
-              onClose={() => setSelectedDay(null)}
-            />
+        <div style={{ position: "fixed", inset: 0, zIndex: 210, display: "flex", alignItems: "center", justifyContent: "center", padding: 20, background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}>
+          <div style={{ width: "100%", maxWidth: 680, maxHeight: "90vh", overflowY: "auto" }}>
+            <DayContentEditor day={selectedDay} existing={curriculum.days[selectedDay]} curriculum={curriculum} onSave={handleSaveDay} onClose={() => setSelectedDay(null)} />
           </div>
         </div>
       )}

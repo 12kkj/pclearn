@@ -84,20 +84,139 @@ export interface AdminDayContent {
   estimatedMinutes: number;
   topics: string[];
   resources: AdminResourceLink[];
-  transcript?: string; // AI-generated transcript from videos
-  lessonContent?: string; // AI-generated lesson from transcript
+  subTopics: AdminSubTopic[];
+  subDays: string[]; // sub-day ids, e.g. ["5a", "5b", "5c"]
+  pipelineStatus: AdminPipelineStatus;
+  adminNotes: string[];
+  tags: AdminDayTag[];
+  transcript?: string;
+  lessonContent?: string;
   quizGenerated?: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
+/** Admin custom phase */
+export interface AdminPhase {
+  id: number;
+  name: string;
+  icon: string;
+  description: string;
+  order: number;
+  color?: string;
+  dayIds: number[]; // ordered day numbers in this phase
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Admin sub-day (e.g. Day 5a Theory, Day 5b Practice, Day 5c Project) */
+export interface AdminSubDay {
+  id: string; // e.g. "5a", "5b"
+  parentId: number;
+  suffix: string;
+  title: string;
+  type: "theory" | "practice" | "project" | "quiz" | "review";
+  description: string;
+  difficulty: "beginner" | "intermediate" | "advanced";
+  estimatedMinutes: number;
+  topics: string[];
+  subTopics: AdminSubTopic[];
+  resources: AdminResourceLink[];
+  transcript?: string;
+  lessonContent?: string;
+  quizGenerated?: boolean;
+  adminNotes?: string;
+  tags: AdminDayTag[];
+  order: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Admin sub-topic (hierarchical topic breakdown) */
+export interface AdminSubTopic {
+  id: string;
+  name: string;
+  description: string;
+  objectives: string[];
+  resources: AdminResourceLink[];
+  order: number;
+}
+
+/** Pipeline status for content workflow */
+export type AdminPipelineStatus =
+  | "draft"
+  | "resources_added"
+  | "transcribed"
+  | "lesson_generated"
+  | "quiz_generated"
+  | "reviewed"
+  | "published";
+
+/** Admin day tags */
+export type AdminDayTag =
+  | "needs_review"
+  | "premium"
+  | "quick_lesson"
+  | "needs_hindi_video"
+  | "needs_practice"
+  | "draft";
+
+/** Student achievement */
+export interface StudentAchievement {
+  id: string;
+  name: string;
+  description: string;
+  icon: string;
+  unlockedAt?: string;
+  progress: number;
+  target: number;
+  category: "streak" | "lesson" | "quiz" | "xp" | "special";
+}
+
+/** Student bookmark */
+export interface StudentBookmark {
+  id: string;
+  day: number;
+  title: string;
+  createdAt: string;
+  note?: string;
+}
+
+/** Student day note */
+export interface StudentDayNote {
+  day: number;
+  content: string;
+  highlights: string[];
+  updatedAt: string;
+}
+
+/** Study day record for calendar heatmap */
+export interface StudyDayRecord {
+  date: string;
+  minutesStudied: number;
+  dayCompleted?: number;
+  quizTaken?: boolean;
+}
+
+/** Admin model test result */
+export interface AdminModelTest {
+  modelId: string;
+  prompt: string;
+  response?: string;
+  latencyMs?: number;
+  error?: string;
+  success: boolean;
+}
+
 /** Full admin curriculum state stored in localStorage */
 export interface AdminCurriculumState {
+  phases: AdminPhase[];
   days: Record<number, AdminDayContent>;
+  subDays: Record<string, AdminSubDay>;
   lastUpdated: string;
 }
 
-export type AppTab = "lesson" | "assessment" | "chat" | "roadmap" | "analytics";
+export type AppTab = "lesson" | "assessment" | "chat" | "roadmap" | "analytics" | "achievements" | "review" | "bookmarks";
 export type DayState = "locked" | "testing" | "revision" | "unlocked" | "passed";
 export type QuestionType = "mcq" | "fill" | "truefalse" | "scenario" | "viva";
 
@@ -302,7 +421,10 @@ export type TutorAction =
   | "admin_transcribe_video"
   | "admin_generate_lesson"
   | "admin_generate_curriculum"
-  | "admin_delete_day";
+  | "admin_delete_day"
+  | "admin_auto_fill_link"
+  | "admin_generate_full_curriculum"
+  | "admin_test_model";
 
 export interface TutorApiRequest {
   action: TutorAction;
@@ -338,6 +460,12 @@ export interface TutorApiRequest {
   description?: string;
   topics?: string[];
   resources?: AdminResourceLink[];
+  // admin auto-fill
+  url?: string;
+  type?: string;
+  // admin model test
+  modelName?: string;
+  model?: string;
 }
 
 export interface QuizQuestion {

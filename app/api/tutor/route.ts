@@ -38,6 +38,9 @@ export async function POST(req: NextRequest) {
     if (action === "admin_generate_lesson") return await handleAdminGenerateLesson(body);
     if (action === "admin_generate_curriculum") return await handleAdminGenerateCurriculum(body);
     if (action === "admin_get_all_days") return await handleAdminGetAllDays(body);
+    if (action === "admin_auto_fill_link") return await handleAdminAutoFillLink(body);
+    if (action === "admin_generate_full_curriculum") return await handleAdminGenerateFullCurriculum(body);
+    if (action === "admin_test_model") return await handleAdminTestModel(body);
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error: unknown) {
@@ -1027,7 +1030,173 @@ Rules:
 // Returns all managed days for admin overview.
 
 async function handleAdminGetAllDays(_body: TutorApiRequest) {
-  // This is handled client-side via localStorage
-  // This endpoint exists for future cloud-sync capabilities
   return NextResponse.json({ message: "Days managed client-side", totalDays: CURRICULUM.length });
+}
+
+// ── ADMIN: AUTO-FILL LINK METADATA ────────────────────────────────────────
+// When admin pastes a URL, AI auto-generates title, difficulty, time, description, topics.
+
+async function handleAdminAutoFillLink(body: TutorApiRequest) {
+  const { url, title: existingTitle, type } = body;
+
+  if (!url) return NextResponse.json({ error: "url required" }, { status: 400 });
+
+  const isYouTube = url.includes("youtube.com") || url.includes("youtu.be");
+
+  const prompt = `You are an education content curator. Analyze this URL and generate metadata for a learning resource.
+
+URL: ${url}
+${existingTitle ? `Existing title: ${existingTitle}` : ""}
+Type: ${type || (isYouTube ? "youtube" : "web")}
+
+Return a JSON object with these fields:
+{
+  "title": "Resource title",
+  "channelName": "${isYouTube ? "Channel name or empty string" : ""}",
+  "description": "2-3 sentence description of what this resource covers",
+  "difficulty": "beginner",
+  "estimatedMinutes": 30,
+  "topics": ["topic1", "topic2", "topic3"],
+  "subTopics": [
+    { "name": "sub-topic name", "description": "what it covers", "objectives": ["learn X", "apply Y"] }
+  ]
+}
+
+Rules:
+- For YouTube: try to infer the video topic from the URL and title
+- difficulty: beginner, intermediate, or advanced
+- topics: specific learning topics (3-5)
+- subTopics: break down each topic (2-3 per topic)
+- estimatedMinutes: typical time to consume + practice
+- Return ONLY valid JSON`;
+
+  try {
+    const raw = await runCompletion({
+      model: MODEL_ASSIGNMENTS.lesson,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.3,
+      maxTokens: 1500,
+      jsonMode: true,
+    });
+    const data = JSON.parse(raw);
+    return NextResponse.json({
+      title: data.title || existingTitle || "Untitled",
+      channelName: data.channelName || undefined,
+      description: data.description || "",
+      difficulty: data.difficulty || "beginner",
+      estimatedMinutes: data.estimatedMinutes || 30,
+      topics: data.topics || [],
+      subTopics: data.subTopics || [],
+    });
+  } catch {
+    return NextResponse.json({ error: "Failed to auto-fill" }, { status: 500 });
+  }
+}
+
+// ── ADMIN: GENERATE FULL CURRICULUM ───────────────────────────────────────
+// AI generates entire curriculum: phases → days → sub-days → topics.
+
+async function handleAdminGenerateFullCurriculum(body: TutorApiRequest) {
+  const { title, topics, description } = body;
+
+  if (!title) return NextResponse.json({ error: "title required" }, { status: 400 });
+
+  const prompt = `You are an expert curriculum designer for "Computer Skills Academy."
+
+Create a COMPLETE curriculum for: "${title}"
+${description ? `Description: ${description}` : ""}
+${topics?.length ? `Topics to include: ${topics.join(", ")}` : ""}
+
+Generate a JSON object with this EXACT structure:
+{
+  "title": "${title}",
+  "description": "Overall curriculum description",
+  "totalDays": 20,
+  "phases": [
+    {
+      "name": "Phase name",
+      "icon": "emoji",
+      "description": "What this phase covers",
+      "color": "#3b82f6",
+      "days": [
+        {
+          "day": 1,
+          "title": "Day title",
+          "description": "Day description",
+          "difficulty": "beginner",
+          "estimatedMinutes": 30,
+          "topics": ["topic1", "topic2"],
+          "subTopics": [
+            { "name": "sub-topic", "description": "what it covers", "objectives": ["learn X", "apply Y"] }
+          ],
+          "subDays": [
+            { "suffix": "a", "title": "Theory", "type": "theory", "estimatedMinutes": 15 },
+            { "suffix": "b", "title": "Practice", "type": "practice", "estimatedMinutes": 20 },
+            { "suffix": "c", "title": "Project", "type": "project", "estimatedMinutes": 25 }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+Rules:
+- Start from basics, progress to advanced
+- Each day covers ONE main concept
+- Include practical exercises in sub-days
+- Sub-days: theory (a), practice (b), project/quiz (c)
+- Topics should be specific and actionable
+- SubTopics should have clear learning objectives
+- Phase icons should be single relevant emojis
+- Colors should be visually distinct for each phase
+- Return ONLY valid JSON`;
+
+  try {
+    const raw = await runCompletion({
+      model: MODEL_ASSIGNMENTS.lesson,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.4,
+      maxTokens: 8000,
+      jsonMode: true,
+    });
+    const data = JSON.parse(raw);
+    return NextResponse.json(data);
+  } catch {
+    return NextResponse.json({ error: "Failed to generate curriculum" }, { status: 500 });
+  }
+}
+
+// ── ADMIN: TEST AI MODEL ──────────────────────────────────────────────────
+// Tests a specific AI model with a prompt and returns the result.
+
+async function handleAdminTestModel(body: TutorApiRequest) {
+  const req = body as TutorApiRequest & { model?: string; message?: string };
+  const modelId = (req.model || MODEL_ASSIGNMENTS.chat) as ModelId;
+  const testPrompt = req.message || "Hello! Please respond with a short test message confirming you are working.";
+
+  const startTime = Date.now();
+  try {
+    const raw = await runCompletion({
+      model: modelId,
+      messages: [{ role: "user", content: testPrompt }],
+      temperature: 0.5,
+      maxTokens: 500,
+    });
+    const latencyMs = Date.now() - startTime;
+    return NextResponse.json({
+      success: true,
+      modelId,
+      response: raw,
+      latencyMs,
+    });
+  } catch (error: unknown) {
+    const latencyMs = Date.now() - startTime;
+    const msg = error instanceof Error ? error.message : "Unknown error";
+    return NextResponse.json({
+      success: false,
+      modelId,
+      error: msg,
+      latencyMs,
+    });
+  }
 }
