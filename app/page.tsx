@@ -28,6 +28,7 @@ import LearningPath from "@/components/student/LearningPath";
 import BookmarkPanel, { type BookmarkItem } from "@/components/student/BookmarkPanel";
 import DailyGoalTracker from "@/components/student/DailyGoalTracker";
 import OnboardingFlow from "@/components/student/OnboardingFlow";
+import DayLinkView from "@/components/student/DayLinkView";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface ResourceSection {
@@ -1637,7 +1638,7 @@ function QuizPanel({ quiz, answers, evalResult, onAnswer, onSubmit, onNextLesson
 }
 
 // ─── Main App ─────────────────────────────────────────────────────────────────
-type Tab = "home" | "lesson" | "quiz" | "chat" | "roadmap";
+type Tab = "home" | "lesson" | "chat" | "roadmap";
 type StudentView = "dashboard" | "achievements" | "learning-path" | "bookmarks" | "smart-review";
 
 export default function Home() {
@@ -2239,9 +2240,8 @@ export default function Home() {
 
   const TABS: Array<{ id: Tab; label: string; icon: React.ReactNode; dot?: boolean; disabled?: boolean }> = [
     { id: "home", label: "Home", icon: <HomeIcon size={17} /> },
-    { id: "lesson", label: "Lesson", icon: <BookOpen size={17} />, dot: !!currentLesson },
-    { id: "quiz", label: "Quiz", icon: <Target size={17} />, dot: !!quiz },
-    { id: "chat", label: "Chat", icon: <MessageSquare size={17} />, disabled: quizInProgress },
+    { id: "lesson", label: "Day", icon: <BookOpen size={17} />, dot: !!currentLesson },
+    { id: "chat", label: "AI Chat", icon: <MessageSquare size={17} />, disabled: quizInProgress },
     { id: "roadmap", label: "Journey", icon: <Map size={17} /> },
   ];
 
@@ -2580,12 +2580,13 @@ export default function Home() {
               isStreaming={isStreaming}
               hasLesson={!!currentLesson}
               onStartDay={async (day) => {
-                try { await streamLesson(day); }
-                catch (e) { console.error(e); }
+                setCurrentLessonDay(day);
+                setActiveTab("lesson");
               }}
               onContinueLesson={() => setActiveTab("lesson")}
               onGoQuiz={async () => {
-                setActiveTab("quiz");
+                setCurrentLessonDay(learner.currentDay || 1);
+                setActiveTab("lesson");
                 if (!quiz && learner.currentDay > 0) {
                   try { await loadQuiz(learner.currentDay); } catch { /* ignore */ }
                 }
@@ -2595,8 +2596,8 @@ export default function Home() {
                 handleSendChat(prompt, MODEL_ASSIGNMENTS.chat);
               }}
               onSelectDay={async (day) => {
-                try { await streamLesson(day); setActiveTab("lesson"); }
-                catch (e) { console.error(e); }
+                setCurrentLessonDay(day);
+                setActiveTab("lesson");
               }}
               bookmarks={bookmarks}
               onToggleBookmark={toggleBookmark}
@@ -2606,253 +2607,39 @@ export default function Home() {
           </div>
         )}
 
-        {/* LESSON */}
+        {/* DAY — Link-only view */}
         {activeTab === "lesson" && (
-          <div ref={lessonScrollRef} onScroll={handleLessonScroll} style={{ height: "100%", overflowY: "auto", background: "var(--bg)", position: "relative" }}>
-            {currentLesson && !isStreaming && (
-              <div style={{ position: "sticky", top: 0, left: 0, right: 0, height: 3, background: "var(--border)", zIndex: 5 }}>
-                <div style={{ height: "100%", width: `${readingProgress}%`, background: "var(--brand)", transition: "width 0.15s ease" }} />
-              </div>
-            )}
-            {!currentLesson && !isStreaming ? (
-              <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                <div style={{ textAlign: "center", padding: 32 }}>
-                  <div style={{ fontSize: "4rem", marginBottom: 16 }}>📖</div>
-                  <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>No lesson loaded yet</h3>
-                  <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", marginBottom: 20 }}>
-                    Go to Home tab and click the <strong>"Start Day 1"</strong> button!
-                  </p>
-                  <button className="btn-primary" onClick={() => setActiveTab("home")}>
-                    <HomeIcon size={15} /> Go to Home
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="lesson-layout">
-                <div className="lesson-main">
-                  {/* Lesson header */}
-                  {currentMeta && (
-                    <div style={{ marginBottom: 20, paddingBottom: 16, borderBottom: "1px solid var(--border)" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
-                        <span className="badge badge-purple">Day {currentLessonDay}</span>
-                        <span className="badge badge-cyan">Phase {currentMeta.phase}</span>
-                        <span className={`badge ${currentMeta.difficulty === "beginner" ? "badge-green" : currentMeta.difficulty === "intermediate" ? "badge-amber" : "badge-red"}`}>
-                          {currentMeta.difficulty === "beginner" ? "🌱 Beginner" : currentMeta.difficulty === "intermediate" ? "📈 Intermediate" : "🔥 Advanced"}
-                        </span>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                        <Clock size={13} style={{ color: "var(--text-muted)" }} />
-                        <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{currentMeta.estimatedMinutes} min</span>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="lesson-context-card" style={{ marginBottom: 16 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-                      <div>
-                        <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.06em" }}>Lesson Context</p>
-                        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)" }}>Add your own notes for this day so they follow you across devices.</p>
-                      </div>
-                      <button className="btn-secondary sm" onClick={saveLessonContext}>
-                        {contextSaved ? "Saved ✓" : "Save Context"}
-                      </button>
-                    </div>
-                    <textarea
-                      className="input-field"
-                      rows={3}
-                      value={lessonContext}
-                      onChange={(e) => setLessonContext(e.target.value)}
-                      placeholder="Example: I want to understand variables, practice 10 minutes, and revise after the quiz..."
-                      style={{ resize: "vertical", minHeight: 72 }}
-                    />
-                  </div>
-
-                  {/* Content */}
-                  <div className="prose-lesson">
-                    <MarkdownViewer text={currentLesson} />
-                    {isStreaming && <span className="cursor-blink" style={{ marginLeft: 4 }} />}
-                  </div>
-
-                  {/* Action bar */}
-                  {!isStreaming && currentLesson && (
-                    <div style={{ marginTop: 24, display: "flex", gap: 10, flexWrap: "wrap", padding: "16px 0", borderTop: "1px solid var(--border)" }}>
-                      <button
-                        className="btn-primary sm"
-                        onClick={async () => {
-                          setActiveTab("quiz");
-                          if (!quiz) {
-                            try { await loadQuiz(currentLessonDay); } catch { /* ignore */ }
-                          }
-                        }}
-                      >
-                        <Target size={14} /> Quiz Lo — Day Test
-                      </button>
-                      <button
-                        className="btn-secondary"
-                        onClick={() => setShowAskAiDrawer(true)}
-                        disabled={quizInProgress}
-                        title={quizInProgress ? "Finish the quiz first" : "Ask AI about this lesson"}
-                        style={quizInProgress ? { opacity: 0.5, cursor: "not-allowed" } : undefined}
-                      >
-                        <Sparkles size={14} /> Ask AI — Instant Help
-                      </button>
-                      <button
-                        className="btn-secondary"
-                        onClick={toggleListen}
-                        title={isSpeaking ? "Stop reading aloud" : "Listen to this lesson"}
-                      >
-                        <Volume2 size={14} /> {isSpeaking ? "⏹ Stop Listening" : "🔊 Listen"}
-                      </button>
-                      <label
-                        className="btn-secondary"
-                        style={{ display: "flex", alignItems: "center", gap: 6, cursor: "pointer" }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={lessonBookmarked}
-                          onChange={(e) => setLessonBookmarked(e.target.checked)}
-                          style={{ accentColor: "var(--brand)" }}
-                        />
-                        {lessonBookmarked ? "🔖 Bookmarked" : "🔖 Bookmark"}
-                      </label>
-                      <button
-                        className="btn-secondary"
-                        onClick={() => {
-                          navigator.clipboard?.writeText(currentLesson);
-                          setCopiedLesson(true);
-                          setTimeout(() => setCopiedLesson(false), 1500);
-                        }}
-                      >
-                        {copiedLesson ? "✅ Copied!" : "📋 Copy Lesson"}
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Quick AI actions — one-click prompts tied to this lesson */}
-                  {!isStreaming && currentLesson && !quizInProgress && (
-                    <div style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "0 0 20px" }}>
-                      {[
-                        { label: "🧒 Explain Like I'm 5", prompt: `Explain today's lesson ("${currentMeta?.title}") in the simplest possible way, like you're teaching a curious 10-year-old — short sentences, one Indian everyday analogy, no jargon.` },
-                        { label: "🌍 Real-World Example", prompt: `Give me 2 real, practical real-world examples of how "${currentMeta?.title}" is used in Indian companies, jobs, or daily life today.` },
-                        { label: "❓ Quiz Me Verbally", prompt: `Ask me 3 quick rapid-fire questions (one at a time is fine, just list them) to test if I understood "${currentMeta?.title}" from today's lesson.` },
-                        { label: "📝 Flashcards", prompt: `Turn the key points of today's lesson ("${currentMeta?.title}") into 5 short flashcards — format each as "Q: ... / A: ..." so I can revise quickly before the test.` },
-                        { label: "🧠 Mnemonic Trick", prompt: `Give me one easy-to-remember mnemonic, acronym, or short story (Indian context if possible) to help me memorize the most important part of "${currentMeta?.title}".` },
-                        { label: "🔑 Key Terms Recap", prompt: `List the 5-8 most important technical terms from today's lesson ("${currentMeta?.title}") with a one-line simple definition for each, so I can quickly revise the vocabulary.` },
-                      ].map((qa) => (
-                        <button
-                          key={qa.label}
-                          className="btn-secondary sm"
-                          onClick={() => {
-                            setShowAskAiDrawer(true);
-                            handleSendChat(qa.prompt, MODEL_ASSIGNMENTS.chat);
-                          }}
-                        >
-                          {qa.label}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Sidebar: resources + quick ask-ai */}
-                {!isStreaming && currentLesson && (
-                  <div className="lesson-sidebar">
-                    <div className="card-sm" style={{ padding: 14, marginBottom: 16 }}>
-                      <button
-                        className="btn-primary"
-                        style={{ width: "100%", justifyContent: "center", opacity: quizInProgress ? 0.5 : 1, cursor: quizInProgress ? "not-allowed" : "pointer" }}
-                        onClick={() => setShowAskAiDrawer(true)}
-                        disabled={quizInProgress}
-                        title={quizInProgress ? "Finish the quiz first" : "Ask AI"}
-                      >
-                        <Sparkles size={14} /> Ask AI about this lesson
-                      </button>
-                    </div>
-
-                    {lessonResources && (() => {
-                      const videoCount = (lessonResources.hindiVideos?.length ?? 0) + (lessonResources.englishVideos?.length ?? 0);
-                      const articleCount = lessonResources.webArticles?.length ?? 0;
-                      if (videoCount === 0 && articleCount === 0) return null;
-                      return (
-                        <button
-                          className="card-sm card-hover"
-                          onClick={() => setShowResourceExplorer("videos")}
-                          style={{
-                            width: "100%", textAlign: "left", padding: 14, cursor: "pointer",
-                            border: "1px solid var(--border)", background: "var(--surface)",
-                            display: "flex", alignItems: "center", gap: 12,
-                          }}
-                        >
-                          <div style={{
-                            width: 40, height: 40, borderRadius: 10, flexShrink: 0,
-                            background: "rgba(239,68,68,0.12)", display: "flex", alignItems: "center", justifyContent: "center",
-                          }}>
-                            <Youtube size={18} style={{ color: "#ef4444" }} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)", marginBottom: 2 }}>
-                              🎥 YouTube Videos
-                            </p>
-                            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                              {videoCount} video{videoCount !== 1 ? "s" : ""} · {articleCount} blog{articleCount !== 1 ? "s" : ""} & link{articleCount !== 1 ? "s" : ""}
-                            </p>
-                          </div>
-                          <ExternalLink size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
-                        </button>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* QUIZ */}
-        {activeTab === "quiz" && (
-          <div style={{ height: "100%", overflow: "hidden" }}>
-            {quizLoading ? (
-              <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16 }}>
-                <Loader2 size={36} className="animate-spin" style={{ color: "var(--brand)" }} />
-                <p style={{ fontSize: "0.9rem", color: "var(--text-muted)" }}>AI test generate kar raha hai…</p>
-                <p style={{ fontSize: "0.78rem", color: "var(--text-faint)" }}>Yeh 10-15 seconds le sakta hai</p>
-              </div>
-            ) : !quiz ? (
-              <div style={{ height: "100%", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 32 }}>
-                <div style={{ textAlign: "center", maxWidth: 380 }}>
-                  <div style={{ fontSize: "4rem", marginBottom: 16 }}>📝</div>
-                  <h3 style={{ fontSize: "1.1rem", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>No quiz available yet</h3>
-                  <p style={{ fontSize: "0.875rem", color: "var(--text-muted)", marginBottom: 20, lineHeight: 1.6 }}>
-                    Read a lesson first, then click the <strong>"Take Quiz"</strong> button below the lesson page!
-                  </p>
-                  <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
-                    <button className="btn-primary sm" onClick={() => setActiveTab("lesson")}>
-                      <BookOpen size={14} /> Read Lesson
-                    </button>
-                    {learner.currentDay > 0 && (
-                      <button className="btn-secondary" onClick={async () => {
-                        try { await loadQuiz(learner.currentDay); } catch { /* ignore */ }
-                      }}>
-                        <Target size={14} /> Load Current Quiz
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <QuizPanel
-                quiz={quiz} answers={answers} evalResult={evalResult}
-                onAnswer={(qId, val) => setAnswers(prev => ({ ...prev, [qId]: val }))}
-                onSubmit={submitQuiz} onNextLesson={handleNextLesson}
-                isSubmitting={isSubmitting}
-                day={parseInt(quiz.title.match(/Day (\d+)/)?.[1] ?? "1")}
-                onAskAi={(prompt) => {
-                  setShowAskAiDrawer(true);
-                  handleSendChat(prompt, MODEL_ASSIGNMENTS.chat);
-                }}
-              />
-            )}
-          </div>
+          <DayLinkView
+            day={currentLessonDay || learner.currentDay || 0}
+            dayData={getAdminDayData(currentLessonDay || learner.currentDay || 0)}
+            learner={learner}
+            isStreaming={isStreaming}
+            lessonContent={currentLesson}
+            quiz={quiz}
+            quizLoading={quizLoading}
+            answers={answers}
+            evalResult={evalResult}
+            isSubmitting={isSubmitting}
+            onAnswer={(qId, val) => setAnswers(prev => ({ ...prev, [qId]: val }))}
+            onSubmitQuiz={submitQuiz}
+            onNextLesson={handleNextLesson}
+            onLoadQuiz={async () => {
+              const day = currentLessonDay || learner.currentDay || 1;
+              try { await loadQuiz(day); } catch { /* ignore */ }
+            }}
+            onStartDay={async (day) => {
+              setCurrentLessonDay(day);
+              setActiveTab("lesson");
+            }}
+            onAskAi={(prompt) => {
+              setShowAskAiDrawer(true);
+              handleSendChat(prompt, MODEL_ASSIGNMENTS.chat);
+            }}
+            onWatchVideo={(videoId, title, channel) => {
+              setVideoPlayerInitialTab("tx");
+              setVideoPlayerTarget({ videoId, videoTitle: title, channelName: channel });
+            }}
+          />
         )}
 
         {/* CHAT */}
