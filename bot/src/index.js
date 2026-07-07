@@ -20,7 +20,7 @@ function getSA(env) {
 
 // ── Firestore paths ───────────────────────────────────────────────────────
 
-const CURRICULUM_DOC = "curriculum";
+const CURRICULUM_DOC = "curriculum/data";
 const userDoc = (id) => `bot_users/${id}`;
 
 // ── Bot Setup ─────────────────────────────────────────────────────────────
