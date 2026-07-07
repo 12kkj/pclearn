@@ -2,6 +2,11 @@ name = "csa-telegram-bot"
 main = "src/index.js"
 compatibility_date = "2024-12-01"
 
+# ── KV Cache (curriculum + user data) ──────────────────────────────────────
+[[kv_namespaces]]
+binding = "CACHE"
+id = "8a15060ca0e24f928429eeed0de13f29"
+
 [vars]
 # Non-secret config — safe to commit
 FIREBASE_PROJECT_ID = "learnpc-4fd7b"
