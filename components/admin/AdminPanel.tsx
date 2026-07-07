@@ -43,23 +43,9 @@ const ALL_TAGS: { key: AdminDayTag; label: string; color: string }[] = [
 // Consistent styling for admin components using CSS variables
 
 // ── Helpers ────────────────────────────────────────────────────────────────
-function loadAdminCurriculum(): AdminCurriculumState {
-  try {
-    const raw = localStorage.getItem(ADMIN_STORAGE_KEY);
-    if (raw) {
-      const p = JSON.parse(raw);
-      return {
-        phases: p.phases ?? PHASES.map(ph => ({
-          id: ph.id, name: ph.name, icon: ph.icon, description: `${ph.name} phase`,
-          order: ph.id, color: ["#3b82f6","#8b5cf6","#f97316","#22c55e","#14b8a6","#eab308","#ef4444","#6366f1","#06b6d4","#ec4899","#7c3aed"][ph.id - 1] ?? "#6366f1",
-          dayIds: ph.days, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString(),
-        })),
-        days: p.days ?? {},
-        subDays: p.subDays ?? {},
-        lastUpdated: p.lastUpdated ?? new Date().toISOString(),
-      };
-    }
-  } catch { /* ignore */ }
+
+/** Build the default curriculum from the static PHASES constant */
+function buildDefaultCurriculum(): AdminCurriculumState {
   return {
     phases: PHASES.map(ph => ({
       id: ph.id, name: ph.name, icon: ph.icon, description: `${ph.name} phase`,
@@ -68,6 +54,36 @@ function loadAdminCurriculum(): AdminCurriculumState {
     })),
     days: {}, subDays: {}, lastUpdated: new Date().toISOString(),
   };
+}
+
+/**
+ * Auto-populate empty dayIds from the static PHASES mapping.
+ * This fixes corrupted Firestore/localStorage data where phases lost their day assignments.
+ */
+function repairDayIds(phases: AdminPhase[]): AdminPhase[] {
+  const staticDaysById = new Map(PHASES.map(p => [p.id, p.days]));
+  return phases.map(phase => {
+    if ((!phase.dayIds || phase.dayIds.length === 0) && staticDaysById.has(phase.id)) {
+      return { ...phase, dayIds: staticDaysById.get(phase.id)!, updatedAt: new Date().toISOString() };
+    }
+    return phase;
+  });
+}
+
+function loadAdminCurriculum(): AdminCurriculumState {
+  try {
+    const raw = localStorage.getItem(ADMIN_STORAGE_KEY);
+    if (raw) {
+      const p = JSON.parse(raw);
+      return {
+        phases: repairDayIds(p.phases ?? buildDefaultCurriculum().phases),
+        days: p.days ?? {},
+        subDays: p.subDays ?? {},
+        lastUpdated: p.lastUpdated ?? new Date().toISOString(),
+      };
+    }
+  } catch { /* ignore */ }
+  return buildDefaultCurriculum();
 }
 
 function saveAdminCurriculum(state: AdminCurriculumState) {
@@ -918,6 +934,11 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                 <h3 style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Import</h3>
                 <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 10 }}>Upload a previously exported JSON file.</p>
                 <label className="btn-secondary sm" style={{ cursor: "pointer" }}><Upload size={12} /> Import File<input type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} /></label>
+              </div>
+              <div style={{ padding: 16, borderRadius: 12, background: "rgba(239,68,68,0.04)", border: "1px solid rgba(239,68,68,0.15)" }}>
+                <h3 style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--red)", marginBottom: 6 }}>⚠️ Reset Curriculum</h3>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 10 }}>Reset all phases to the default 21-phase structure. Day content is preserved.</p>
+                <button className="btn-secondary sm" style={{ color: "var(--red)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => { if (confirm("Reset phases to default structure? Day content will NOT be deleted.")) { setCurriculum(prev => ({ ...prev, phases: buildDefaultCurriculum().phases })); } }}><RefreshCw size={12} /> Reset to Default Phases</button>
               </div>
             </div>
           </div>
