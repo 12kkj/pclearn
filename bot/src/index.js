@@ -448,7 +448,11 @@ function formatDayMessage(day, dayData, isCompleted) {
   if (dayData.description) msg += `📋 ${dayData.description}\n`;
 
   const resources = dayData.resources || [];
-  if (resources.length === 0) msg += `_No links yet._\n`;
+  if (resources.length === 0) {
+    msg += `_No links yet._\n`;
+  } else {
+    msg += `\n🔗 *Watch & Learn:* [Open Player](${WEB_URL}/?day=${day})\n`;
+  }
 
   return msg;
 }
