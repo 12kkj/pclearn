@@ -418,7 +418,11 @@ function buildMenuKeyboard(day) {
 
 function buildDayKeyboard(day) {
   return new InlineKeyboard()
-    .text("🧪 Take Quiz", `quiz_${day}`)
+    .url(`📖 Watch in Browser`, `${WEB_URL}/?day=${day}`)
+    .row()
+    .url(`🧪 Quiz in Browser`, `${WEB_URL}/?day=${day}&quiz=true`)
+    .row()
+    .text("🧪 Take Quiz here", `quiz_${day}`)
     .row()
     .text("🤖 Ask AI about this", `ask_day_${day}`)
     .row()
