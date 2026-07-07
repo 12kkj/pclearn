@@ -246,7 +246,7 @@ function DayContentEditor({ day, existing, curriculum, onSave, onClose }: {
   const [generating, setGenerating] = useState(false);
   const [activeTab, setActiveTab] = useState<"resources" | "subtopics" | "notes">("resources");
 
-  const phase = curriculum.phases.find(p => p.dayIds.includes(day)) ?? PHASES.find(p => p.days.includes(day));
+  const phase = curriculum.phases.find(p => (p.dayIds ?? []).includes(day)) ?? PHASES.find(p => p.days.includes(day));
 
   const build = (extra?: Partial<AdminDayContent>): AdminDayContent => ({
     day, title: title.trim() || `Day ${day}`, description: description.trim(),
@@ -508,7 +508,7 @@ function PhaseManager({ curriculum, onPhasesChange }: { curriculum: AdminCurricu
           <span style={{ fontSize: "1.2rem" }}>{phase.icon}</span>
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>Phase {phase.id}: {phase.name}</p>
-            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{phase.dayIds.length} days • {phase.description}</p>
+            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{(phase.dayIds ?? []).length} days • {phase.description}</p>
           </div>
           <div style={{ display: "flex", gap: 3 }}>
             <button onClick={() => handleMove(phase.id, "up")} className="btn-icon" style={{ width: 26, height: 26 }}><ArrowUp size={11} /></button>
@@ -854,7 +854,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             </div>
             {/* Phases */}
             {curriculum.phases.sort((a, b) => a.order - b.order).map(phase => {
-              const phaseDays = phase.dayIds.filter(d => filteredDays.includes(d) || (!searchQuery && !curriculum.days[d]));
+              const phaseDays = (phase.dayIds ?? []).filter(d => filteredDays.includes(d) || (!searchQuery && !curriculum.days[d]));
               if (phaseDays.length === 0 && searchQuery) return null;
               const isExpanded = expandedPhase === phase.id;
               const published = phaseDays.filter(d => curriculum.days[d]?.pipelineStatus === "published").length;
@@ -868,7 +868,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                     <span style={{ fontSize: "1.1rem" }}>{phase.icon}</span>
                     <div style={{ flex: 1, textAlign: "left" }}>
                       <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>Phase {phase.id}: {phase.name}</p>
-                      <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{phase.dayIds.length} days • {published} published</p>
+                      <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{(phase.dayIds ?? []).length} days • {published} published</p>
                     </div>
                     <ChevronRight size={14} style={{ color: "var(--text-muted)", transition: "transform 0.2s", transform: isExpanded ? "rotate(90deg)" : "none" }} />
                   </button>

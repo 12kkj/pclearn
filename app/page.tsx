@@ -890,9 +890,9 @@ function HomeTab({
   const currentMeta = getLessonByDay(learner.currentDay || 1);
   const phase = getPhaseForDay(learner.currentDay || 1);
   const phaseDays = phase ? getLessonsInPhase(phase.id) : [];
-  const phaseCompleted = phaseDays.filter(d => learner.completedDays.includes(d.day)).length;
+  const phaseCompleted = phaseDays.filter(d => (learner.completedDays ?? []).includes(d.day)).length;
   const phasePct = phaseDays.length > 0 ? Math.round((phaseCompleted / phaseDays.length) * 100) : 0;
-  const overallPct = Math.round((learner.completedDays.length / 100) * 100);
+  const overallPct = Math.round(((learner.completedDays ?? []).length / 100) * 100);
 
   const [todayTip, setTodayTip] = React.useState(HOME_TIPS[0]);
   const [showOnboarding, setShowOnboarding] = React.useState(false);
@@ -927,8 +927,8 @@ function HomeTab({
   const phaseColor = PHASE_COLORS[(phase?.id ?? 1) - 1] ?? "#6366f1";
   const recommendedDay = learner.currentDay > 0 ? Math.min(learner.currentDay, 100) : 1;
   const recommendedLesson = getLessonByDay(recommendedDay);
-  const weeklyCompleted = learner.completedDays.filter((day) => day >= Math.max(1, recommendedDay - 6)).length;
-  const quizScores = Object.values(learner.testScores).filter((score) => Number(score) > 0);
+  const weeklyCompleted = (learner.completedDays ?? []).filter((day) => day >= Math.max(1, recommendedDay - 6)).length;
+  const quizScores = Object.values(learner.testScores ?? {}).filter((score) => Number(score) > 0);
   const quizAccuracy = quizScores.length > 0
     ? Math.round((quizScores.reduce((sum, score) => sum + Number(score), 0) / (quizScores.length * 5)) * 100)
     : 0;
@@ -1236,7 +1236,7 @@ function HomeTab({
         <div style={{ display: "grid", gap: 10 }}>
           {PHASES.map((ph) => {
             const phDays = getLessonsInPhase(ph.id);
-            const phDone = phDays.filter((d) => learner.completedDays.includes(d.day)).length;
+            const phDone = phDays.filter((d) => (learner.completedDays ?? []).includes(d.day)).length;
             const col = PHASE_COLORS[ph.id - 1] ?? "#6366f1";
             const status = phDone === phDays.length ? "Completed" : phDone > 0 ? "In progress" : "Upcoming";
             const isMastery = ph.id >= 18;
@@ -1352,7 +1352,7 @@ function RoadmapPanel({ learner, onJumpToDay }: {
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {PHASES.map((phase) => {
             const phaseDays = getLessonsInPhase(phase.id);
-            const completedInPhase = phaseDays.filter(d => learner.completedDays.includes(d.day)).length;
+            const completedInPhase = phaseDays.filter(d => (learner.completedDays ?? []).includes(d.day)).length;
             const phasePct = phaseDays.length > 0 ? Math.round((completedInPhase / phaseDays.length) * 100) : 0;
             const isExpanded = expandedPhase === phase.id;
             const color = PHASE_COLORS[phase.id - 1] ?? "#6366f1";
