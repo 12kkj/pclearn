@@ -3,15 +3,15 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   Plus, Trash2, Youtube, Globe, FileText,
-  Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronRight,
+  Loader2, CheckCircle2, AlertCircle, ChevronRight,
   Sparkles, BookOpen, Brain, Link2, Download, Upload,
-  Shield, Eye, Edit3, Save, X, Search,
+  Shield, Edit3, Save, X, Search,
   ArrowUp, ArrowDown, MessageSquare, TestTube2, Route, Layers,
-  Tag, GripVertical, Cloud, CloudOff, RefreshCw,
+  Tag, Cloud, CloudOff, RefreshCw, Users, BarChart3,
 } from "lucide-react";
 import type {
   AdminDayContent, AdminResourceLink, AdminCurriculumState,
-  AdminPhase, AdminSubDay, AdminSubTopic, AdminPipelineStatus,
+  AdminPhase, AdminSubTopic, AdminPipelineStatus,
   AdminDayTag, AdminModelTest,
 } from "@/types";
 import { PHASES, getLessonByDay } from "@/lib/curriculum";
@@ -38,6 +38,9 @@ const ALL_TAGS: { key: AdminDayTag; label: string; color: string }[] = [
   { key: "needs_practice", label: "Needs Practice", color: "#8b5cf6" },
   { key: "draft", label: "Draft", color: "#6b7280" },
 ];
+
+// ── Admin CSS ─�───────────────────────────────────────────────────────────
+// Consistent styling for admin components using CSS variables
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function loadAdminCurriculum(): AdminCurriculumState {
@@ -298,14 +301,14 @@ function DayContentEditor({ day, existing, curriculum, onSave, onClose }: {
   };
 
   return (
-    <div style={{ padding: 18, borderRadius: 14, border: "1.5px solid var(--brand)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 14 }}>
+    <div style={{ padding: 16, borderRadius: 14, border: "1.5px solid var(--brand)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 12 }}>
       {/* Header */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 36, height: 36, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${pipeColor(pipelineStatus)}, ${phase?.color ?? "#6366f1"})`, fontSize: "0.85rem", fontWeight: 800, color: "#fff" }}>{day}</div>
+          <div style={{ width: 34, height: 34, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", background: `linear-gradient(135deg, ${pipeColor(pipelineStatus)}, ${phase?.color ?? "#6366f1"})`, fontSize: "0.82rem", fontWeight: 800, color: "#fff" }}>{day}</div>
           <div>
-            <h3 style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text)" }}>Day {day}</h3>
-            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{phase ? `${phase.icon} ${phase.name}` : "?"} • {PIPELINE_STAGES.find(s => s.key === pipelineStatus)?.icon} {PIPELINE_STAGES.find(s => s.key === pipelineStatus)?.label}</p>
+            <h3 style={{ fontSize: "0.92rem", fontWeight: 800, color: "var(--text)" }}>Day {day}</h3>
+            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{phase ? `${phase.icon} ${phase.name}` : "?"} • {PIPELINE_STAGES.find(s => s.key === pipelineStatus)?.icon} {PIPELINE_STAGES.find(s => s.key === pipelineStatus)?.label}</p>
           </div>
         </div>
         <div style={{ display: "flex", gap: 6 }}>
@@ -497,20 +500,20 @@ function PhaseManager({ curriculum, onPhasesChange }: { curriculum: AdminCurricu
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)" }}>📂 Manage Phases</h2>
+        <h2 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text)" }}>📎 Manage Phases</h2>
         <button className="btn-primary sm" onClick={() => setShowAdd(true)}><Plus size={12} /> Add Phase</button>
       </div>
       {[...curriculum.phases].sort((a, b) => a.order - b.order).map(phase => (
-        <div key={phase.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10, border: `1.5px solid ${phase.color ?? "var(--border)"}`, background: "var(--surface)", marginBottom: 8 }}>
-          <span style={{ fontSize: "1.4rem" }}>{phase.icon}</span>
+        <div key={phase.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", marginBottom: 6 }}>
+          <span style={{ fontSize: "1.2rem" }}>{phase.icon}</span>
           <div style={{ flex: 1 }}>
-            <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)" }}>Phase {phase.id}: {phase.name}</p>
-            <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{phase.dayIds.length} days • {phase.description}</p>
+            <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>Phase {phase.id}: {phase.name}</p>
+            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{phase.dayIds.length} days • {phase.description}</p>
           </div>
-          <div style={{ display: "flex", gap: 4 }}>
-            <button onClick={() => handleMove(phase.id, "up")} className="btn-icon" style={{ width: 28, height: 28 }}><ArrowUp size={12} /></button>
-            <button onClick={() => handleMove(phase.id, "down")} className="btn-icon" style={{ width: 28, height: 28 }}><ArrowDown size={12} /></button>
-            <button onClick={() => { if (confirm(`Delete Phase ${phase.id}?`)) onPhasesChange(curriculum.phases.filter(p => p.id !== phase.id)); }} className="btn-icon" style={{ width: 28, height: 28, color: "var(--red)" }}><Trash2 size={12} /></button>
+          <div style={{ display: "flex", gap: 3 }}>
+            <button onClick={() => handleMove(phase.id, "up")} className="btn-icon" style={{ width: 26, height: 26 }}><ArrowUp size={11} /></button>
+            <button onClick={() => handleMove(phase.id, "down")} className="btn-icon" style={{ width: 26, height: 26 }}><ArrowDown size={11} /></button>
+            <button onClick={() => { if (confirm(`Delete Phase ${phase.id}?`)) onPhasesChange(curriculum.phases.filter(p => p.id !== phase.id)); }} className="btn-icon" style={{ width: 26, height: 26, color: "var(--red)" }}><Trash2 size={11} /></button>
           </div>
         </div>
       ))}
@@ -541,8 +544,8 @@ function CurriculumGenerator({ onGenerate, generating }: { onGenerate: (t: strin
   const [title, setTitle] = useState(""); const [topics, setTopics] = useState(""); const [desc, setDesc] = useState("");
   return (
     <div>
-      <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 12 }}>🤖 AI Curriculum Generator</h2>
-      <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>Type a topic and AI generates an entire curriculum with phases, days, sub-days, topics, and learning objectives.</p>
+      <h2 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text)", marginBottom: 10 }}>✨ AI Curriculum Generator</h2>
+      <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 14 }}>Type a topic and AI generates an entire curriculum with phases, days, sub-days, topics, and learning objectives.</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 600 }}>
         <div>
           <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Topic / Course Title *</label>
@@ -569,7 +572,7 @@ function PipelineView({ curriculum, onSelectDay }: { curriculum: AdminCurriculum
   const managed = Object.values(curriculum.days);
   return (
     <div>
-      <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 16 }}>📋 Content Pipeline</h2>
+      <h2 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text)", marginBottom: 14 }}>📋 Content Pipeline</h2>
       <div style={{ display: "grid", gridTemplateColumns: `repeat(${PIPELINE_STAGES.length}, 1fr)`, gap: 8, overflowX: "auto" }}>
         {PIPELINE_STAGES.map(stage => {
           const days = managed.filter(d => d.pipelineStatus === stage.key);
@@ -606,8 +609,8 @@ function ModelTestPanel({ results, testing, onTest, modelSel, onModelSel, prompt
 
   return (
     <div>
-      <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 12 }}>🧪 Test AI Models</h2>
-      <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>Test any AI model to verify it works. Tests run in the background — switch tabs freely.</p>
+      <h2 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text)", marginBottom: 10 }}>🧪 Test AI Models</h2>
+      <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 14 }}>Test any AI model to verify it works. Tests run in the background — switch tabs freely.</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 600 }}>
         <div>
           <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Model</label>
@@ -775,86 +778,102 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 200, display: "flex", background: "var(--bg)", overflow: "hidden" }}>
       {/* Sidebar */}
-      <div style={{ width: 260, borderRight: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
-        <div style={{ padding: "16px 18px", borderBottom: "1px solid var(--border)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
-            <Shield size={18} style={{ color: "var(--brand)" }} />
-            <span style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text)" }}>Admin Panel</span>
+      <div style={{ width: 240, borderRight: "1px solid var(--border)", background: "var(--surface)", display: "flex", flexDirection: "column", flexShrink: 0 }}>
+        <div style={{ padding: "18px 16px", borderBottom: "1px solid var(--border)" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 8, background: "linear-gradient(135deg, var(--brand), var(--brand2))", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Shield size={15} color="#fff" />
+            </div>
+            <div>
+              <p style={{ fontSize: "0.85rem", fontWeight: 800, color: "var(--text)" }}>Admin</p>
+              <p style={{ fontSize: "0.62rem", color: "var(--text-muted)" }}>Curriculum Manager</p>
+            </div>
           </div>
-          <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Manage curriculum & content</p>
-          {/* Cloud sync indicator */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "6px 10px", borderRadius: 8, background: cloudSyncStatus === "syncing" ? "rgba(59,130,246,0.1)" : cloudSyncStatus === "synced" ? "rgba(16,185,129,0.1)" : cloudSyncStatus === "error" ? "rgba(239,68,68,0.1)" : "var(--surface2)", border: `1px solid ${cloudSyncStatus === "syncing" ? "rgba(59,130,246,0.3)" : cloudSyncStatus === "synced" ? "rgba(16,185,129,0.3)" : cloudSyncStatus === "error" ? "rgba(239,68,68,0.3)" : "var(--border)"}` }}>
-            {cloudSyncStatus === "syncing" ? <><RefreshCw size={12} style={{ color: "#3b82f6", animation: "spin 1s linear infinite" }} /><span style={{ fontSize: "0.68rem", color: "#3b82f6", fontWeight: 600 }}>Syncing to cloud...</span></>
-            : cloudSyncStatus === "synced" ? <><Cloud size={12} style={{ color: "var(--green)" }} /><span style={{ fontSize: "0.68rem", color: "var(--green)", fontWeight: 600 }}>Students will see updates</span></>
-            : cloudSyncStatus === "error" ? <><CloudOff size={12} style={{ color: "var(--red)" }} /><span style={{ fontSize: "0.68rem", color: "var(--red)", fontWeight: 600 }}>Sync failed — try manually</span></>
-            : <><Cloud size={12} style={{ color: "var(--text-muted)" }} /><span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600 }}>Auto-syncs after edits</span></>
+          {/* Cloud sync */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, background: cloudSyncStatus === "syncing" ? "rgba(59,130,246,0.08)" : cloudSyncStatus === "synced" ? "rgba(16,185,129,0.08)" : cloudSyncStatus === "error" ? "rgba(239,68,68,0.08)" : "var(--surface2)", border: `1px solid ${cloudSyncStatus === "syncing" ? "rgba(59,130,246,0.25)" : cloudSyncStatus === "synced" ? "rgba(16,185,129,0.25)" : cloudSyncStatus === "error" ? "rgba(239,68,68,0.25)" : "var(--border)"}` }}>
+            {cloudSyncStatus === "syncing" ? <><RefreshCw size={11} style={{ color: "#3b82f6", animation: "spin 1s linear infinite" }} /><span style={{ fontSize: "0.65rem", color: "#3b82f6", fontWeight: 600 }}>Syncing…</span></>
+            : cloudSyncStatus === "synced" ? <><Cloud size={11} style={{ color: "var(--green)" }} /><span style={{ fontSize: "0.65rem", color: "var(--green)", fontWeight: 600 }}>Synced</span></>
+            : cloudSyncStatus === "error" ? <><CloudOff size={11} style={{ color: "var(--red)" }} /><span style={{ fontSize: "0.65rem", color: "var(--red)", fontWeight: 600 }}>Failed</span></>
+            : <><Cloud size={11} style={{ color: "var(--text-muted)" }} /><span style={{ fontSize: "0.65rem", color: "var(--text-muted)", fontWeight: 600 }}>Auto-sync on</span></>
             }
           </div>
         </div>
-        <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-            <div style={{ padding: "8px 10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
-              <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Days</p>
-              <p style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--brand)" }}>{managedDays.length}</p>
+        {/* Stats */}
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--border)" }}>
+          <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ flex: 1, padding: "6px 8px", borderRadius: 8, background: "var(--surface2)", textAlign: "center" }}>
+              <p style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--brand)" }}>{managedDays.length}</p>
+              <p style={{ fontSize: "0.55rem", color: "var(--text-muted)", fontWeight: 600 }}>DAYS</p>
             </div>
-            <div style={{ padding: "8px 10px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
-              <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>Resources</p>
-              <p style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--cyan)" }}>{totalResources}</p>
+            <div style={{ flex: 1, padding: "6px 8px", borderRadius: 8, background: "var(--surface2)", textAlign: "center" }}>
+              <p style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--cyan)" }}>{totalResources}</p>
+              <p style={{ fontSize: "0.55rem", color: "var(--text-muted)", fontWeight: 600 }}>LINKS</p>
+            </div>
+            <div style={{ flex: 1, padding: "6px 8px", borderRadius: 8, background: "var(--surface2)", textAlign: "center" }}>
+              <p style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--green)" }}>{curriculum.phases.length}</p>
+              <p style={{ fontSize: "0.55rem", color: "var(--text-muted)", fontWeight: 600 }}>PHASES</p>
             </div>
           </div>
         </div>
-        <div style={{ padding: "10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ padding: "10px 10px", display: "flex", flexDirection: "column", gap: 2, flex: 1 }}>
           {([
-            { id: "days" as const, icon: <BookOpen size={15} />, label: "Manage Days" },
-            { id: "phases" as const, icon: <Layers size={15} />, label: "Manage Phases" },
-            { id: "pipeline" as const, icon: <Route size={15} />, label: "Pipeline View" },
+            { id: "days" as const, icon: <BookOpen size={15} />, label: "Days" },
+            { id: "phases" as const, icon: <Layers size={15} />, label: "Phases" },
+            { id: "pipeline" as const, icon: <Route size={15} />, label: "Pipeline" },
             { id: "generator" as const, icon: <Sparkles size={15} />, label: "AI Generator" },
             { id: "test" as const, icon: <TestTube2 size={15} />, label: "Model Test" },
-            { id: "export" as const, icon: <Download size={15} />, label: "Import / Export" },
+            { id: "export" as const, icon: <Download size={15} />, label: "Import/Export" },
           ]).map(item => (
             <button key={item.id} onClick={() => setActiveSection(item.id)} style={{
-              display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, border: "none", cursor: "pointer", fontSize: "0.82rem", fontWeight: 600,
+              display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: "0.82rem", fontWeight: 600,
               background: activeSection === item.id ? "var(--brand-glow)" : "transparent",
               color: activeSection === item.id ? "var(--brand2)" : "var(--text-muted)", transition: "all 0.15s", fontFamily: "inherit", textAlign: "left", width: "100%",
             }}>{item.icon} {item.label}</button>
           ))}
         </div>
-        <div style={{ flex: 1 }} />
-        <div style={{ padding: "14px 18px", borderTop: "1px solid var(--border)" }}>
-          <button onClick={onClose} className="btn-secondary" style={{ width: "100%", justifyContent: "center" }}>← Back to Academy</button>
+        <div style={{ padding: "12px 14px", borderTop: "1px solid var(--border)" }}>
+          <button onClick={onClose} style={{
+            width: "100%", padding: "9px", borderRadius: 8, border: "1px solid var(--border)", background: "var(--surface2)",
+            color: "var(--text-muted)", fontSize: "0.78rem", fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
+          }}>← Back to Academy</button>
         </div>
       </div>
 
       {/* Main Content */}
-      <div style={{ flex: 1, overflowY: "auto", padding: 24 }}>
+      <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px" }}>
         {activeSection === "days" && (
           <div style={{ maxWidth: 800, margin: "0 auto" }}>
+            {/* Header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
+              <h2 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text)" }}>📖 Manage Days</h2>
+            </div>
+            {/* Search */}
             <div style={{ marginBottom: 16, position: "relative" }}>
               <Search size={14} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--text-muted)" }} />
-              <input type="text" className="input-field" placeholder="Search days by title or topic..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ paddingLeft: 36 }} />
+              <input type="text" className="input-field" placeholder="Search by title or topic…" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} style={{ paddingLeft: 36 }} />
             </div>
+            {/* Phases */}
             {curriculum.phases.sort((a, b) => a.order - b.order).map(phase => {
               const phaseDays = phase.dayIds.filter(d => filteredDays.includes(d) || (!searchQuery && !curriculum.days[d]));
               if (phaseDays.length === 0 && searchQuery) return null;
               const isExpanded = expandedPhase === phase.id;
               const published = phaseDays.filter(d => curriculum.days[d]?.pipelineStatus === "published").length;
               return (
-                <div key={phase.id} style={{ marginBottom: 12 }}>
+                <div key={phase.id} style={{ marginBottom: 10 }}>
                   <button onClick={() => setExpandedPhase(isExpanded ? null : phase.id)} style={{
-                    width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "12px 14px", borderRadius: 10,
+                    width: "100%", display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10,
                     border: `1px solid ${isExpanded ? (phase.color ?? "var(--brand)") : "var(--border)"}`,
                     background: isExpanded ? "var(--surface2)" : "var(--surface)", cursor: "pointer", fontFamily: "inherit",
                   }}>
-                    <span style={{ fontSize: "1.2rem" }}>{phase.icon}</span>
+                    <span style={{ fontSize: "1.1rem" }}>{phase.icon}</span>
                     <div style={{ flex: 1, textAlign: "left" }}>
-                      <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)" }}>Phase {phase.id}: {phase.name}</p>
-                      <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>{phase.dayIds.length} days</p>
+                      <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>Phase {phase.id}: {phase.name}</p>
+                      <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{phase.dayIds.length} days • {published} published</p>
                     </div>
-                    <span className="badge badge-purple">{published}/{phase.dayIds.length}</span>
                     <ChevronRight size={14} style={{ color: "var(--text-muted)", transition: "transform 0.2s", transform: isExpanded ? "rotate(90deg)" : "none" }} />
                   </button>
                   {isExpanded && (
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8, padding: "10px 4px" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 6, padding: "8px 4px" }}>
                       {phaseDays.map(day => {
                         const content = curriculum.days[day];
                         const isSel = selectedDay === day;
@@ -862,16 +881,16 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                         const sc = has ? pipeColor(content.pipelineStatus) : "var(--border)";
                         return (
                           <button key={day} onClick={() => setSelectedDay(isSel ? null : day)} style={{
-                            padding: "10px 12px", borderRadius: 10, textAlign: "left",
-                            border: `1.5px solid ${isSel ? "var(--brand)" : sc}`,
-                            background: isSel ? "var(--brand-glow)" : has ? `${sc}08` : "var(--surface)", cursor: "pointer", fontFamily: "inherit",
+                            padding: "8px 10px", borderRadius: 8, textAlign: "left",
+                            border: `1.5px solid ${isSel ? "var(--brand)" : "var(--border)"}`,
+                            background: isSel ? "rgba(99,102,241,0.06)" : "var(--surface)", cursor: "pointer", fontFamily: "inherit",
                           }}>
-                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
-                              <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text)" }}>Day {day}</span>
-                              {has ? <span style={{ fontSize: "0.6rem", padding: "2px 6px", borderRadius: 999, background: `${sc}20`, color: sc, fontWeight: 600 }}>{PIPELINE_STAGES.find(s => s.key === content.pipelineStatus)?.icon}</span> : <Plus size={12} style={{ color: "var(--text-muted)" }} />}
+                            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 3 }}>
+                              <span style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text)" }}>Day {day}</span>
+                              {has ? <span style={{ fontSize: "0.55rem", padding: "1px 5px", borderRadius: 999, background: `${sc}18`, color: sc, fontWeight: 600 }}>{PIPELINE_STAGES.find(s => s.key === content.pipelineStatus)?.icon}</span> : <Plus size={10} style={{ color: "var(--text-muted)" }} />}
                             </div>
-                            <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{content?.title ?? getLessonByDay(day)?.title ?? "Click to add"}</p>
-                            {has && content.resources.length > 0 && <p style={{ fontSize: "0.65rem", color: "var(--cyan)", marginTop: 3 }}>📎 {content.resources.length}</p>}
+                            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{content?.title ?? getLessonByDay(day)?.title ?? "Click to add"}</p>
+                            {has && content.resources.length > 0 && <p style={{ fontSize: "0.62rem", color: "var(--cyan)", marginTop: 2 }}>📎 {content.resources.length} links</p>}
                           </button>
                         );
                       })}
@@ -883,21 +902,21 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
           </div>
         )}
         {activeSection === "phases" && <div style={{ maxWidth: 800, margin: "0 auto" }}><PhaseManager curriculum={curriculum} onPhasesChange={(phases) => setCurriculum(prev => ({ ...prev, phases }))} /></div>}
-        {activeSection === "pipeline" && <div style={{ maxWidth: 1200, margin: "0 auto" }}><PipelineView curriculum={curriculum} onSelectDay={(d) => { setSelectedDay(d); setActiveSection("days"); }} /></div>}
-        {activeSection === "generator" && <div style={{ maxWidth: 800, margin: "0 auto" }}><CurriculumGenerator onGenerate={handleGenerateFullCurriculum} generating={generatingCurriculum} /></div>}
-        {activeSection === "test" && <div style={{ maxWidth: 800, margin: "0 auto" }}><ModelTestPanel results={modelTestResults} testing={modelTestRunning} onTest={handleModelTest} modelSel={modelTestSel} onModelSel={setModelTestSel} promptText={modelTestPrompt} onPromptChange={setModelTestPrompt} /></div>}
+        {activeSection === "pipeline" && <div style={{ maxWidth: 1100, margin: "0 auto" }}><PipelineView curriculum={curriculum} onSelectDay={(d) => { setSelectedDay(d); setActiveSection("days"); }} /></div>}
+        {activeSection === "generator" && <div style={{ maxWidth: 600, margin: "0 auto" }}><CurriculumGenerator onGenerate={handleGenerateFullCurriculum} generating={generatingCurriculum} /></div>}
+        {activeSection === "test" && <div style={{ maxWidth: 600, margin: "0 auto" }}><ModelTestPanel results={modelTestResults} testing={modelTestRunning} onTest={handleModelTest} modelSel={modelTestSel} onModelSel={setModelTestSel} promptText={modelTestPrompt} onPromptChange={setModelTestPrompt} /></div>}
         {activeSection === "export" && (
-          <div style={{ maxWidth: 600, margin: "0 auto" }}>
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 16 }}>📦 Import / Export</h2>
-            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <div style={{ padding: 18, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
-                <h3 style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Export</h3>
-                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 12 }}>Download all days, phases, resources, and content as JSON.</p>
+          <div style={{ maxWidth: 500, margin: "0 auto" }}>
+            <h2 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text)", marginBottom: 16 }}>📦 Import / Export</h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ padding: 16, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+                <h3 style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Export</h3>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 10 }}>Download all days, phases, resources, and content as JSON.</p>
                 <button className="btn-primary sm" onClick={handleExport}><Download size={12} /> Export ({managedDays.length} days)</button>
               </div>
-              <div style={{ padding: 18, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
-                <h3 style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>Import</h3>
-                <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 12 }}>Upload a previously exported JSON file.</p>
+              <div style={{ padding: 16, borderRadius: 12, background: "var(--surface)", border: "1px solid var(--border)" }}>
+                <h3 style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Import</h3>
+                <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 10 }}>Upload a previously exported JSON file.</p>
                 <label className="btn-secondary sm" style={{ cursor: "pointer" }}><Upload size={12} /> Import File<input type="file" accept=".json" onChange={handleImport} style={{ display: "none" }} /></label>
               </div>
             </div>
