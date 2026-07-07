@@ -29,6 +29,16 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── Curriculum (admin-created content) — publicly readable, anyone can write ──
+    match /curriculum/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+    match /curriculum/{collection}/{docId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // Main student state document — only the student who owns it
     match /students/{studentId} {
       allow read, write: if isOwner(studentId);

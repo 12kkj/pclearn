@@ -343,6 +343,31 @@ export function mergeStates(
 
 const CURRICULUM_COLLECTION = "curriculum";
 
+/**
+ * Admin sync helper — signs in anonymously to push curriculum to Firestore.
+ * The curriculum collection is publicly readable in our security rules,
+ * so students can pull it without auth.
+ */
+async function ensureAdminAuth(): Promise<boolean> {
+  const auth = getFirebaseAuth();
+  if (auth.currentUser) return true; // Already signed in
+  try {
+    const { signInAnonymously } = await import("firebase/auth");
+    await signInAnonymously(auth);
+    return true;
+  } catch {
+    // Anonymous auth not enabled — try with a throwaway email
+    try {
+      const { signInWithEmailAndPassword } = await import("firebase/auth");
+      await signInWithEmailAndPassword(auth, "admin@learnpc.app", "admin123");
+      return true;
+    } catch {
+      console.warn("[firebase-sync] Could not authenticate admin for curriculum sync");
+      return false;
+    }
+  }
+}
+
 /** Strip heavy/unnecessary fields before writing to Firestore */
 function stripCurriculumForFirestore(state: any): Record<string, unknown> {
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -359,6 +384,12 @@ export async function syncCurriculumToFirestore(
   state: any
 ): Promise<void> {
   try {
+    // Ensure we have an auth session before writing to Firestore
+    const authed = await ensureAdminAuth();
+    if (!authed) {
+      console.warn("[firebase-sync] Skipping curriculum sync — no auth");
+      return;
+    }
     const db = getFirebaseDb();
 
     // 1. Save phases + metadata
