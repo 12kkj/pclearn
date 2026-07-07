@@ -447,8 +447,19 @@ export async function loadCurriculumFromFirestore(): Promise<{
       if (!isNaN(num)) days[num] = val;
     }
 
-    console.log("[firebase-sync] Curriculum loaded from Firestore:", Object.keys(days).length, "days");
-    return { phases: data.phases ?? [], days };
+    // REST API stores values as JSON strings — parse them back to objects
+    const parsedPhases = (data.phases ?? []).map((p: any) => {
+      if (typeof p === "string") { try { return JSON.parse(p); } catch { return p; } }
+      return p;
+    });
+    const parsedDays: Record<number, any> = {};
+    for (const [k, v] of Object.entries(days)) {
+      if (typeof v === "string") { try { parsedDays[Number(k)] = JSON.parse(v as string); } catch { parsedDays[Number(k)] = v; } }
+      else { parsedDays[Number(k)] = v; }
+    }
+
+    console.log("[firebase-sync] Curriculum loaded from Firestore:", Object.keys(parsedDays).length, "days");
+    return { phases: parsedPhases, days: parsedDays };
   } catch (err) {
     console.warn("[firebase-sync] Failed to load curriculum:", err);
     return null;

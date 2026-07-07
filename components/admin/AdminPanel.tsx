@@ -699,6 +699,24 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
 
   useEffect(() => { saveAdminCurriculum(curriculum); }, [curriculum]);
 
+  // ── Pull curriculum from Firestore on mount (cross-device sync) ──
+  React.useEffect(() => {
+    let cancelled = false;
+    import("@/lib/firebase-sync").then(({ loadCurriculumFromFirestore }) =>
+      loadCurriculumFromFirestore().then(cloud => {
+        if (cancelled || !cloud) return;
+        setCurriculum(prev => {
+          // Merge: cloud days override local (cloud = source of truth), local-only days preserved
+          const mergedDays = { ...prev.days, ...cloud.days };
+          // Only use cloud phases if they have more data than local
+          const mergedPhases = cloud.phases?.length > 0 ? cloud.phases : prev.phases;
+          return { ...prev, days: mergedDays, phases: mergedPhases };
+        });
+      }).catch(() => {})
+    );
+    return () => { cancelled = true; };
+  }, []);
+
   // ── Auto-sync curriculum to Firestore (debounced, so students see updates) ──
   const _cloudSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [cloudSyncStatus, setCloudSyncStatus] = useState<"idle" | "syncing" | "synced" | "error">("idle");
