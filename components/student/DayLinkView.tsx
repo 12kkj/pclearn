@@ -305,16 +305,13 @@ export default function DayLinkView({
     if (quizOnly && !quiz && !quizLoading) onLoadQuiz();
   }, [quizOnly]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle video close from external modal
+  // Handle video close from external modal (advances playlist)
   useEffect(() => {
     if (videoCloseTrigger === 0) return;
     if (activeVideo >= 0) {
       setWatchedVideos(prev => new Set([...prev, activeVideo]));
       if (activeVideo < videoLinks.length - 1) {
-        const nextIdx = activeVideo + 1;
-        setActiveVideo(nextIdx);
-        const link = videoLinks[nextIdx];
-        onWatchVideo(getVideoId(link.url), link.title, link.channelName ?? "");
+        setActiveVideo(activeVideo + 1);
       } else {
         setActiveVideo(-1);
         setBottomTab("quiz");
@@ -339,7 +336,7 @@ export default function DayLinkView({
     }
   }, [activeVideo]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Play a specific video
+  // Play a specific video — INLINE only, no modal
   const playVideo = useCallback((idx: number) => {
     if (idx === activeVideo) return;
     if (activeVideo >= 0) {
@@ -347,9 +344,7 @@ export default function DayLinkView({
     }
     setActiveVideo(idx);
     setMobilePlaylistOpen(false);
-    const link = videoLinks[idx];
-    if (link) onWatchVideo(getVideoId(link.url), link.title, link.channelName ?? "");
-  }, [activeVideo, videoLinks, onWatchVideo]);
+  }, [activeVideo]);
 
   // Start playlist from beginning
   const startPlaylist = useCallback(() => {
