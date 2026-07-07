@@ -271,11 +271,20 @@ export default function VideoPlayerModal({ videoId, videoTitle, channelName, onC
 
   // ─── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 200,
-      background: "rgba(0,0,0,0.96)", backdropFilter: "blur(8px)",
-      display: "flex", flexDirection: "column",
-    }}>
+      {/* Modal overlay – responsive with padding for small screens */}
+      <div style={{
+        position: "fixed",
+        inset: 0,
+        zIndex: 200,
+        background: "rgba(0,0,0,0.96)",
+        backdropFilter: "blur(8px)",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "center",
+        alignItems: "center",
+        padding: "env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)",
+        overflow: "auto",
+      }}>
       {/* ── Header ── */}
       <div style={{
         display: "flex", alignItems: "center", gap: 10,
@@ -301,11 +310,32 @@ export default function VideoPlayerModal({ videoId, videoTitle, channelName, onC
       </div>
 
       {/* ── Body ── */}
-      <div className="vp-layout">
+      {/* Wrapper to constrain modal content width and center it */}
+      <div style={{
+        maxWidth: "1000px",
+        margin: "0 auto",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+      }}>
+        <div className="vp-layout">
         {/* ── Left: Player + Controls ── */}
         <div className="vp-left">
           {/* Player */}
-          <div style={{ position: "relative", background: "#000", flexShrink: 0 }} className="vp-player-box">
+          {/* Player container – maintain 16:9 aspect ratio and limit max size */}
+          <div
+            style={{
+              position: "relative",
+              background: "#000",
+              flexShrink: 0,
+              width: "100%",
+              maxWidth: "800px",
+              margin: "0 auto",
+              aspectRatio: "16 / 9",
+              maxHeight: "80vh",
+            }}
+            className="vp-player-box"
+          >
             <div ref={playerDivRef} style={{ width: "100%", height: "100%" }} />
             {!playerReady && (
               <div style={{
@@ -375,6 +405,26 @@ export default function VideoPlayerModal({ videoId, videoTitle, channelName, onC
                   {r}x
                 </button>
               ))}
+                {/* Fullscreen toggle */}
+                <button onClick={() => {
+                  const iframe = playerRef.current?.getIframe?.();
+                  if (iframe) {
+                    if (document.fullscreenElement) {
+                      document.exitFullscreen();
+                    } else {
+                      iframe.requestFullscreen?.();
+                    }
+                  }
+                }} title="Toggle Fullscreen" style={{
+                  padding: "2px",
+                  borderRadius: 5,
+                  border: "1px solid var(--border)",
+                  background: "var(--surface3)",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                }}>
+                  <Maximize2 size={14} />
+                </button>
             </div>
           </div>
 

@@ -308,31 +308,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 
 /* ─── Player Responsive ─────────────────────────────────────────── */
-.player-layout {
-  display: flex;
-  flex: 1;
-  overflow: hidden;
-  min-height: 0;
-}
-.player-main {
-  flex: 1;
-  min-width: 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
 @media (max-width: 768px) {
   .playlist-sidebar { display: none !important; }
   .player-layout { flex-direction: column !important; }
   .player-main { width: 100% !important; }
 }
-@media (min-width: 769px) and (max-width: 1100px) {
-  .playlist-sidebar { width: 200px !important; }
-}
-@media (min-width: 1101px) {
-  .playlist-sidebar { display: flex !important; width: 240px !important; }
+@media (min-width: 769px) {
+  .playlist-sidebar { display: flex !important; }
+  .player-layout { flex-direction: row !important; }
 }
 
 @media (max-width: 768px) {
