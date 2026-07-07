@@ -1831,7 +1831,35 @@ export default function Home() {
     // Check cache first — if we have it, load instantly without API call
     if (loadCachedLesson(day)) {
       setActiveTab("lesson");
-      // Fetch resources in background (cache hits skip the streaming path)
+      // Check if admin has provided resources for this day
+      try {
+        const adminRaw = localStorage.getItem("csa_admin_curriculum");
+        if (adminRaw) {
+          const adminData: AdminCurriculumState = JSON.parse(adminRaw);
+          const adminDay = adminData.days[day];
+          if (adminDay?.resources?.length > 0) {
+            const ytVideos = adminDay.resources.filter(r => r.type === "youtube");
+            setLessonResources({
+              hindiVideos: ytVideos.map(r => ({
+                videoId: (() => { try { return new URL(r.url).searchParams.get("v") ?? ""; } catch { return ""; } })(),
+                title: r.title,
+                channelName: r.channelName,
+                thumbnailUrl: r.thumbnailUrl,
+                url: r.url,
+              })),
+              englishVideos: [],
+              webArticles: adminDay.resources.filter(r => r.type !== "youtube").map(r => ({
+                title: r.title,
+                url: r.url,
+                snippet: r.description,
+              })),
+            });
+            setShowResourceExplorer("videos");
+            return; // Skip API resource fetch — use admin resources
+          }
+        }
+      } catch { /* non-fatal */ }
+      // Fallback: fetch resources from AI if no admin content
       setLessonResources(null);
       setShowResourceExplorer(false);
       fetchLessonResources(day);

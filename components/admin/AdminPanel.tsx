@@ -278,9 +278,20 @@ function DayContentEditor({ day, existing, curriculum, onSave, onClose }: {
   const handleGenerateLesson = async () => {
     setGenerating(true);
     try {
+      // Get transcript from existing content or from the most recent transcribe result
+      let transcriptText = existing?.transcript ?? "";
+      if (!transcriptText) {
+        try {
+          const adminRaw = localStorage.getItem("csa_admin_curriculum");
+          if (adminRaw) {
+            const adminData = JSON.parse(adminRaw);
+            transcriptText = adminData.days?.[day]?.transcript ?? "";
+          }
+        } catch { /* ignore */ }
+      }
       const res = await fetch("/api/tutor", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "admin_generate_lesson", day, title, topics: topics.split(",").map(t => t.trim()).filter(Boolean), resources }) });
-      if (res.ok) { const d = await res.json(); if (d.lessonContent) { setPipelineStatus("lesson_generated"); onSave(build({ lessonContent: d.lessonContent, transcript: d.transcript })); } }
+        body: JSON.stringify({ action: "admin_generate_lesson", day, title, topics: topics.split(",").map(t => t.trim()).filter(Boolean), resources, transcript: transcriptText || undefined }) });
+      if (res.ok) { const d = await res.json(); if (d.lessonContent) { setPipelineStatus("lesson_generated"); onSave(build({ lessonContent: d.lessonContent, transcript: d.transcript || transcriptText })); } }
     } catch (e) { console.error(e); }
     setGenerating(false);
   };
@@ -589,8 +600,15 @@ function ModelTestPanel() {
   const modelEntries = Object.entries(MODELS) as [string, ModelId][];
   const [sel, setSel] = useState<ModelId>(modelEntries[0]?.[1] ?? "");
   const [prompt, setPrompt] = useState("Explain what a variable is in Python in 2 sentences.");
-  const [results, setResults] = useState<AdminModelTest[]>([]);
+  const [results, setResults] = useState<AdminModelTest[]>(() => {
+    try { return JSON.parse(localStorage.getItem("csa_admin_model_tests") ?? "[]"); } catch { return []; }
+  });
   const [testing, setTesting] = useState(false);
+
+  // Persist results to localStorage
+  useEffect(() => {
+    try { localStorage.setItem("csa_admin_model_tests", JSON.stringify(results.slice(0, 50))); } catch { /* quota */ }
+  }, [results]);
 
   const handleTest = async () => {
     if (!sel || testing) return;

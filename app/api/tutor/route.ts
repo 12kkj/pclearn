@@ -913,7 +913,7 @@ async function handleAdminTranscribeVideo(body: TutorApiRequest) {
 // Takes admin-provided resources and generates a complete lesson.
 
 async function handleAdminGenerateLesson(body: TutorApiRequest) {
-  const { day = 1, title, topics, resources } = body;
+  const { day = 1, title, topics, resources, transcript } = body;
 
   if (!title) return NextResponse.json({ error: "title required" }, { status: 400 });
 
@@ -921,11 +921,16 @@ async function handleAdminGenerateLesson(body: TutorApiRequest) {
     ? `\n\nADMIN-PROVIDED RESOURCES:\n${resources.map(r => `- [${r.title}] ${r.url} (${r.type})`).join("\n")}`
     : "";
 
+  // Include transcript content in the lesson generation prompt
+  const transcriptBlock = transcript
+    ? `\n\nVIDEO TRANSCRIPTS (use these to inform the lesson content):\n${transcript.slice(0, 6000)}`
+    : "";
+
   const prompt = `You are "Computer Skills Academy," a world-class AI tutor teaching in clear, friendly Indian English.
 
 Generate a COMPLETE lesson for Day ${day}: "${title}"
 Topics: ${topics?.join(", ") ?? title}
-${resourceBlock}
+${resourceBlock}${transcriptBlock}
 
 CRITICAL RULES:
 - Write in clear, friendly INDIAN ENGLISH
@@ -1043,16 +1048,33 @@ async function handleAdminAutoFillLink(body: TutorApiRequest) {
 
   const isYouTube = url.includes("youtube.com") || url.includes("youtu.be");
 
+  // Step 1: For YouTube, fetch the actual title + channel via oEmbed API
+  let fetchedTitle = existingTitle || "";
+  let fetchedChannel = "";
+  if (isYouTube) {
+    try {
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+      const oembedRes = await fetch(oembedUrl, { signal: AbortSignal.timeout(5000) });
+      if (oembedRes.ok) {
+        const oembedData = await oembedRes.json();
+        fetchedTitle = oembedData.title || fetchedTitle;
+        fetchedChannel = oembedData.author_name || "";
+      }
+    } catch { /* oEmbed failed, continue without it */ }
+  }
+
+  // Step 2: Use AI to generate description, difficulty, topics from the URL + title
   const prompt = `You are an education content curator. Analyze this URL and generate metadata for a learning resource.
 
 URL: ${url}
-${existingTitle ? `Existing title: ${existingTitle}` : ""}
+Title: ${fetchedTitle || "Unknown"}
+Channel: ${fetchedChannel || "Unknown"}
 Type: ${type || (isYouTube ? "youtube" : "web")}
 
 Return a JSON object with these fields:
 {
-  "title": "Resource title",
-  "channelName": "${isYouTube ? "Channel name or empty string" : ""}",
+  "title": "Resource title (use the fetched title above)",
+  "channelName": "${fetchedChannel || "Channel name"}",
   "description": "2-3 sentence description of what this resource covers",
   "difficulty": "beginner",
   "estimatedMinutes": 30,
@@ -1063,7 +1085,7 @@ Return a JSON object with these fields:
 }
 
 Rules:
-- For YouTube: try to infer the video topic from the URL and title
+- ALWAYS use the title provided above as the title field
 - difficulty: beginner, intermediate, or advanced
 - topics: specific learning topics (3-5)
 - subTopics: break down each topic (2-3 per topic)
@@ -1080,8 +1102,8 @@ Rules:
     });
     const data = JSON.parse(raw);
     return NextResponse.json({
-      title: data.title || existingTitle || "Untitled",
-      channelName: data.channelName || undefined,
+      title: data.title || fetchedTitle || existingTitle || "Untitled",
+      channelName: data.channelName || fetchedChannel || undefined,
       description: data.description || "",
       difficulty: data.difficulty || "beginner",
       estimatedMinutes: data.estimatedMinutes || 30,
@@ -1089,7 +1111,16 @@ Rules:
       subTopics: data.subTopics || [],
     });
   } catch {
-    return NextResponse.json({ error: "Failed to auto-fill" }, { status: 500 });
+    // Fallback: return at least the fetched title/channel even if AI fails
+    return NextResponse.json({
+      title: fetchedTitle || existingTitle || "Untitled",
+      channelName: fetchedChannel || undefined,
+      description: "",
+      difficulty: "beginner",
+      estimatedMinutes: 30,
+      topics: [],
+      subTopics: [],
+    });
   }
 }
 
