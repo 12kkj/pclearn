@@ -19,6 +19,8 @@ import {
   collection,
   getDocs,
   serverTimestamp,
+  deleteDoc,
+  writeBatch,
 } from "firebase/firestore";
 import {
   createUserWithEmailAndPassword,
@@ -290,6 +292,8 @@ export function mergeStates(
     new Set([...(local.completedDays ?? []), ...(cloud.completedDays ?? [])])
   ).sort((a, b) => a - b);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
   const mergedTestScores: Record<number, number> = {
     ...(local.testScores ?? {}),
     ...(cloud.testScores ?? {}),
@@ -328,4 +332,138 @@ export function mergeStates(
       ...(cloud.lessonSnapshots ?? {}),
     },
   };
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// Curriculum Sync — pushes admin content to Firestore for all students
+// Firestore structure:
+//   curriculum/phases   → { phases: [...], lastUpdated }
+//   curriculum/days/{N} → { dayNumber, lessonContent, resources, ... }
+// ══════════════════════════════════════════════════════════════════════════
+
+const CURRICULUM_COLLECTION = "curriculum";
+
+/** Strip heavy/unnecessary fields before writing to Firestore */
+function stripCurriculumForFirestore(state: any): Record<string, unknown> {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { lastUpdated, subDays, ...rest } = state;
+  return { ...rest, _lastSynced: serverTimestamp() };
+}
+
+/**
+ * Push the full admin curriculum state to Firestore.
+ * - Phases go into a single "phases" doc.
+ * - Each day's content goes into its own doc under curriculum/days/.
+ */
+export async function syncCurriculumToFirestore(
+  state: any
+): Promise<void> {
+  try {
+    const db = getFirebaseDb();
+
+    // 1. Save phases + metadata
+    const phasesRef = doc(db, CURRICULUM_COLLECTION, "phases");
+    await setDoc(phasesRef, {
+      phases: state.phases ?? [],
+      lastUpdated: serverTimestamp(),
+    });
+
+    // 2. Save each day's content as its own doc
+    const days = state.days ?? {};
+    const dayEntries = Object.entries(days) as [string, any][];
+    for (const [dayStr, dayData] of dayEntries) {
+      const dayNum = parseInt(dayStr, 10);
+      if (isNaN(dayNum)) continue;
+      const dayRef = doc(db, CURRICULUM_COLLECTION, "days", dayStr);
+      // Only save the essential content fields (skip anything huge or redundant)
+      const { dayNumber: _dn, ...content } = dayData;
+      await setDoc(dayRef, {
+        dayNumber: dayNum,
+        ...content,
+        _lastSynced: serverTimestamp(),
+      });
+    }
+
+    // 3. Clean up deleted day docs (days that exist in Firestore but not in local state)
+    try {
+      const daysCol = collection(db, CURRICULUM_COLLECTION, "days");
+      const existingDocs = await getDocs(daysCol);
+      const validDayNums = new Set(dayEntries.map(([k]) => k));
+      const batch = writeBatch(db);
+      let batchCount = 0;
+      existingDocs.forEach((d: any) => {
+        if (!validDayNums.has(d.id)) {
+          batch.delete(d.ref);
+          batchCount++;
+        }
+      });
+      if (batchCount > 0) await batch.commit();
+    } catch { /* non-critical cleanup */ }
+
+    console.log("[firebase-sync] Curriculum pushed to Firestore:", dayEntries.length, "days");
+  } catch (err) {
+    console.warn("[firebase-sync] Failed to push curriculum:", err);
+  }
+}
+
+/**
+ * Pull curriculum from Firestore.
+ * Returns { phases, days } or null if no cloud data exists.
+ */
+export async function loadCurriculumFromFirestore(): Promise<{
+  phases: any[];
+  days: Record<number, any>;
+} | null> {
+  try {
+    const db = getFirebaseDb();
+
+    // 1. Load phases
+    const phasesRef = doc(db, CURRICULUM_COLLECTION, "phases");
+    const phasesSnap = await getDoc(phasesRef);
+    if (!phasesSnap.exists()) return null;
+    const phasesData = phasesSnap.data();
+
+    // 2. Load all day docs
+    const daysCol = collection(db, CURRICULUM_COLLECTION, "days");
+    const daysSnap = await getDocs(daysCol);
+    const days: Record<number, any> = {};
+    daysSnap.forEach((d: any) => {
+      const data = d.data();
+      const dayNum = data.dayNumber ?? parseInt(d.id, 10);
+      if (!isNaN(dayNum)) {
+        const { _lastSynced: _ls, dayNumber: _dn, ...rest } = data;
+        days[dayNum] = rest;
+      }
+    });
+
+    console.log("[firebase-sync] Curriculum loaded from Firestore:", Object.keys(days).length, "days");
+    return { phases: phasesData.phases ?? [], days };
+  } catch (err) {
+    console.warn("[firebase-sync] Failed to load curriculum:", err);
+    return null;
+  }
+}
+
+/**
+ * Delete ALL curriculum data from Firestore (nuclear reset).
+ * Does NOT touch student data.
+ */
+export async function deleteCurriculumFromFirestore(): Promise<void> {
+  try {
+    const db = getFirebaseDb();
+    const batch = writeBatch(db);
+
+    // Delete phases doc
+    batch.delete(doc(db, CURRICULUM_COLLECTION, "phases"));
+
+    // Delete all day docs
+    const daysCol = collection(db, CURRICULUM_COLLECTION, "days");
+    const daysSnap = await getDocs(daysCol);
+    daysSnap.forEach((d: any) => batch.delete(d.ref));
+
+    await batch.commit();
+    console.log("[firebase-sync] Curriculum deleted from Firestore");
+  } catch (err) {
+    console.warn("[firebase-sync] Failed to delete curriculum:", err);
+  }
 }

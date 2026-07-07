@@ -19,7 +19,8 @@ import type { StudentId, AdminSession } from "@/types";
 import { checkPassword, savePassword, saveDeviceId, getSavedDeviceId, generateDeviceId, isDeviceLinked, firebaseLogin, logoutStudent, changePassword } from "@/lib/auth";
 import { MODEL_ASSIGNMENTS } from "@/constants/models";
 import AdminPanel from "@/components/admin/AdminPanel";
-import type { AdminCurriculumState } from "@/types";
+import type { AdminCurriculumState, AdminDayContent } from "@/types";
+import { loadCurriculumFromFirestore } from "@/lib/firebase-sync";
 import CalendarHeatmap from "@/components/student/CalendarHeatmap";
 import AchievementPanel from "@/components/student/AchievementPanel";
 import SmartReview from "@/components/student/SmartReview";
@@ -1698,6 +1699,46 @@ export default function Home() {
   // ── Admin Panel ──
   const [showAdminPanel, setShowAdminPanel] = React.useState(false);
   const [isAdminUser, setIsAdminUser] = React.useState(false);
+  // ── Cloud Curriculum (loaded from Firestore so students on any device see admin content) ──
+  const cloudCurriculumRef = React.useRef<AdminCurriculumState | null>(null);
+  const [cloudCurriculumLoaded, setCloudCurriculumLoaded] = React.useState(false);
+
+  /** Load curriculum from Firestore (runs once on login) */
+  React.useEffect(() => {
+    if (!isLoggedIn || cloudCurriculumLoaded) return;
+    loadCurriculumFromFirestore().then(cloud => {
+      if (cloud) {
+        // Merge cloud curriculum into a full AdminCurriculumState shape
+        const localRaw = localStorage.getItem("csa_admin_curriculum");
+        const local = localRaw ? JSON.parse(localRaw) : {};
+        cloudCurriculumRef.current = {
+          phases: cloud.phases?.length ? cloud.phases : (local.phases ?? []),
+          days: Object.keys(cloud.days).length > 0 ? cloud.days : (local.days ?? {}),
+          subDays: local.subDays ?? {},
+          lastUpdated: new Date().toISOString(),
+        };
+        // Also write to localStorage so it's available offline
+        localStorage.setItem("csa_admin_curriculum", JSON.stringify(cloudCurriculumRef.current));
+      }
+      setCloudCurriculumLoaded(true);
+    }).catch(() => setCloudCurriculumLoaded(true));
+  }, [isLoggedIn, cloudCurriculumLoaded]);
+
+  /** Helper: get admin day data — checks cloud first, then localStorage */
+  const getAdminDayData = React.useCallback((day: number): AdminDayContent | null => {
+    try {
+      // 1. Try cloud-loaded curriculum (most up-to-date)
+      const cloud = cloudCurriculumRef.current;
+      if (cloud?.days?.[day]) return cloud.days[day];
+      // 2. Fallback to localStorage
+      const raw = localStorage.getItem("csa_admin_curriculum");
+      if (raw) {
+        const data: AdminCurriculumState = JSON.parse(raw);
+        if (data.days?.[day]) return data.days[day];
+      }
+    } catch { /* ignore */ }
+    return null;
+  }, []);
   // ── Celebration ──
   const [showCelebration, setShowCelebration] = React.useState(false);
   const [celebrationData, setCelebrationData] = React.useState<{
@@ -1832,33 +1873,27 @@ export default function Home() {
     if (loadCachedLesson(day)) {
       setActiveTab("lesson");
       // Check if admin has provided resources for this day
-      try {
-        const adminRaw = localStorage.getItem("csa_admin_curriculum");
-        if (adminRaw) {
-          const adminData: AdminCurriculumState = JSON.parse(adminRaw);
-          const adminDay = adminData.days[day];
-          if (adminDay?.resources?.length > 0) {
-            const ytVideos = adminDay.resources.filter(r => r.type === "youtube");
-            setLessonResources({
-              hindiVideos: ytVideos.map(r => ({
-                videoId: (() => { try { return new URL(r.url).searchParams.get("v") ?? ""; } catch { return ""; } })(),
-                title: r.title,
-                channelName: r.channelName,
-                thumbnailUrl: r.thumbnailUrl,
-                url: r.url,
-              })),
-              englishVideos: [],
-              webArticles: adminDay.resources.filter(r => r.type !== "youtube").map(r => ({
-                title: r.title,
-                url: r.url,
-                snippet: r.description,
-              })),
-            });
-            setShowResourceExplorer("videos");
-            return; // Skip API resource fetch — use admin resources
-          }
-        }
-      } catch { /* non-fatal */ }
+      const adminDay = getAdminDayData(day);
+      if (adminDay && adminDay.resources?.length > 0) {
+        const ytVideos = adminDay.resources.filter(r => r.type === "youtube");
+        setLessonResources({
+          hindiVideos: ytVideos.map(r => ({
+            videoId: (() => { try { return new URL(r.url).searchParams.get("v") ?? ""; } catch { return ""; } })(),
+            title: r.title,
+            channelName: r.channelName,
+            thumbnailUrl: r.thumbnailUrl,
+            url: r.url,
+          })),
+          englishVideos: [],
+          webArticles: adminDay.resources.filter(r => r.type !== "youtube").map(r => ({
+            title: r.title,
+            url: r.url,
+            snippet: r.description,
+          })),
+        });
+        setShowResourceExplorer("videos");
+        return; // Skip API resource fetch — use admin resources
+      }
       // Fallback: fetch resources from AI if no admin content
       setLessonResources(null);
       setShowResourceExplorer(false);
@@ -1867,41 +1902,35 @@ export default function Home() {
     }
 
     // Check for admin-provided content
-    try {
-      const adminRaw = localStorage.getItem("csa_admin_curriculum");
-      if (adminRaw) {
-        const adminData: AdminCurriculumState = JSON.parse(adminRaw);
-        const adminDay = adminData.days[day];
-        if (adminDay?.lessonContent) {
-          setLessonContent(adminDay.lessonContent);
-          setStreamingContent(adminDay.lessonContent);
-          setCurrentLessonDay(day);
-          setActiveTab("lesson");
-          // Set admin-provided resources
-          if (adminDay.resources?.length > 0) {
-            const ytVideos = adminDay.resources.filter(r => r.type === "youtube");
-            setLessonResources({
-              hindiVideos: ytVideos.map(r => ({
-                videoId: (() => { try { return new URL(r.url).searchParams.get("v") ?? ""; } catch { return ""; } })(),
-                title: r.title,
-                channelName: r.channelName,
-                thumbnailUrl: r.thumbnailUrl,
-                url: r.url,
-              })),
-              englishVideos: [],
-              webArticles: adminDay.resources.filter(r => r.type !== "youtube").map(r => ({
-                title: r.title,
-                url: r.url,
-                snippet: r.description,
-              })),
-            });
-            setShowResourceExplorer("videos");
-          }
-          cacheLesson(day, adminDay.lessonContent);
-          return;
-        }
+    const adminDay2 = getAdminDayData(day);
+    if (adminDay2 && adminDay2.lessonContent) {
+      setLessonContent(adminDay2.lessonContent);
+      setStreamingContent(adminDay2.lessonContent);
+      setCurrentLessonDay(day);
+      setActiveTab("lesson");
+      // Set admin-provided resources
+      if (adminDay2.resources?.length > 0) {
+        const ytVideos = adminDay2.resources.filter(r => r.type === "youtube");
+        setLessonResources({
+          hindiVideos: ytVideos.map(r => ({
+            videoId: (() => { try { return new URL(r.url).searchParams.get("v") ?? ""; } catch { return ""; } })(),
+            title: r.title,
+            channelName: r.channelName,
+            thumbnailUrl: r.thumbnailUrl,
+            url: r.url,
+          })),
+          englishVideos: [],
+          webArticles: adminDay2.resources.filter(r => r.type !== "youtube").map(r => ({
+            title: r.title,
+            url: r.url,
+            snippet: r.description,
+          })),
+        });
+        setShowResourceExplorer("videos");
       }
-    } catch { /* ignore */ }
+      cacheLesson(day, adminDay2.lessonContent);
+      return;
+    }
 
     setIsStreaming(true);
     setStreamingContent("");

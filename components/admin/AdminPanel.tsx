@@ -1,13 +1,13 @@
 "use client";
 
-import React, { useState, useCallback, useEffect } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
 import {
   Plus, Trash2, Youtube, Globe, FileText,
   Loader2, CheckCircle2, AlertCircle, ChevronDown, ChevronRight,
   Sparkles, BookOpen, Brain, Link2, Download, Upload,
   Shield, Eye, Edit3, Save, X, Search,
   ArrowUp, ArrowDown, MessageSquare, TestTube2, Route, Layers,
-  Tag, GripVertical,
+  Tag, GripVertical, Cloud, CloudOff, RefreshCw,
 } from "lucide-react";
 import type {
   AdminDayContent, AdminResourceLink, AdminCurriculumState,
@@ -17,6 +17,7 @@ import type {
 import { PHASES, getLessonByDay } from "@/lib/curriculum";
 import { MODELS, MODEL_INFO } from "@/constants/models";
 import type { ModelId } from "@/constants/models";
+import { syncCurriculumToFirestore } from "@/lib/firebase-sync";
 
 // ── Constants ──────────────────────────────────────────────────────────────
 const ADMIN_STORAGE_KEY = "csa_admin_curriculum";
@@ -679,6 +680,26 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
 
   useEffect(() => { saveAdminCurriculum(curriculum); }, [curriculum]);
 
+  // ── Auto-sync curriculum to Firestore (debounced, so students see updates) ──
+  const _cloudSyncTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<"idle" | "syncing" | "synced" | "error">("idle");
+
+  useEffect(() => {
+    if (_cloudSyncTimer.current) clearTimeout(_cloudSyncTimer.current);
+    _cloudSyncTimer.current = setTimeout(async () => {
+      setCloudSyncStatus("syncing");
+      try {
+        await syncCurriculumToFirestore(curriculum);
+        setCloudSyncStatus("synced");
+        setTimeout(() => setCloudSyncStatus("idle"), 3000);
+      } catch {
+        setCloudSyncStatus("error");
+        setTimeout(() => setCloudSyncStatus("idle"), 5000);
+      }
+    }, 5000); // 5-second debounce after last edit
+    return () => { if (_cloudSyncTimer.current) clearTimeout(_cloudSyncTimer.current); };
+  }, [curriculum]);
+
   const handleSaveDay = useCallback((content: AdminDayContent) => {
     setCurriculum(prev => ({ ...prev, days: { ...prev.days, [content.day]: content } }));
     setSelectedDay(null);
@@ -761,6 +782,14 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             <span style={{ fontSize: "0.95rem", fontWeight: 800, color: "var(--text)" }}>Admin Panel</span>
           </div>
           <p style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>Manage curriculum & content</p>
+          {/* Cloud sync indicator */}
+          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 8, padding: "6px 10px", borderRadius: 8, background: cloudSyncStatus === "syncing" ? "rgba(59,130,246,0.1)" : cloudSyncStatus === "synced" ? "rgba(16,185,129,0.1)" : cloudSyncStatus === "error" ? "rgba(239,68,68,0.1)" : "var(--surface2)", border: `1px solid ${cloudSyncStatus === "syncing" ? "rgba(59,130,246,0.3)" : cloudSyncStatus === "synced" ? "rgba(16,185,129,0.3)" : cloudSyncStatus === "error" ? "rgba(239,68,68,0.3)" : "var(--border)"}` }}>
+            {cloudSyncStatus === "syncing" ? <><RefreshCw size={12} style={{ color: "#3b82f6", animation: "spin 1s linear infinite" }} /><span style={{ fontSize: "0.68rem", color: "#3b82f6", fontWeight: 600 }}>Syncing to cloud...</span></>
+            : cloudSyncStatus === "synced" ? <><Cloud size={12} style={{ color: "var(--green)" }} /><span style={{ fontSize: "0.68rem", color: "var(--green)", fontWeight: 600 }}>Students will see updates</span></>
+            : cloudSyncStatus === "error" ? <><CloudOff size={12} style={{ color: "var(--red)" }} /><span style={{ fontSize: "0.68rem", color: "var(--red)", fontWeight: 600 }}>Sync failed — try manually</span></>
+            : <><Cloud size={12} style={{ color: "var(--text-muted)" }} /><span style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600 }}>Auto-syncs after edits</span></>
+            }
+          </div>
         </div>
         <div style={{ padding: "14px 18px", borderBottom: "1px solid var(--border)" }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
