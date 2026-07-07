@@ -1077,3 +1077,142 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .vp-player-box { aspect-ratio: 16/9; max-height: 40vh; }
   .vp-right { flex: 1; min-height: 0; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   MINIMAL STUDENT UI — Clean, Simple, Focused
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Simple day card */
+.day-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.day-card:hover {
+  border-color: var(--brand);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+}
+.day-card.active {
+  border-color: var(--brand);
+  background: rgba(99,102,241,0.08);
+}
+.day-card.completed {
+  border-color: var(--green);
+  background: rgba(16,185,129,0.05);
+}
+
+/* Simple progress bar */
+.simple-progress {
+  height: 4px;
+  background: var(--surface3);
+  border-radius: 99px;
+  overflow: hidden;
+}
+.simple-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, var(--brand), var(--brand2));
+  transition: width 0.5s ease;
+}
+
+/* Simple nav pills */
+.simple-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 99px;
+  border: 1.5px solid var(--border);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.simple-pill:hover {
+  border-color: var(--brand);
+  color: var(--text);
+}
+.simple-pill.active {
+  border-color: var(--brand);
+  background: rgba(99,102,241,0.1);
+  color: var(--brand2);
+}
+
+/* Link card — minimal */
+.link-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  transition: all 0.15s ease;
+}
+.link-card:hover {
+  border-color: var(--brand);
+  transform: translateY(-1px);
+}
+
+/* Watch button */
+.watch-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  border: none;
+  font-size: 0.88rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+.watch-btn.red {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(239,68,68,0.3);
+}
+.watch-btn.purple {
+  background: linear-gradient(135deg, var(--brand), var(--brand2));
+  color: #fff;
+  box-shadow: 0 4px 14px var(--brand-glow);
+}
+.watch-btn:hover { transform: translateY(-1px); }
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--text-muted);
+}
+
+/* Floating AI button — bottom right */
+.fab-ai {
+  position: fixed;
+  right: 20px;
+  bottom: 80px;
+  z-index: 45;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(135deg, var(--brand), var(--brand2));
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 20px rgba(99,102,241,0.4);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.fab-ai:hover { transform: scale(1.08); }
+
+@media (min-width: 1025px) {
+  .fab-ai { bottom: 28px; right: 28px; }
+}

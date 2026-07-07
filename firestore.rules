@@ -24,25 +24,9 @@ service cloud.firestore {
         && request.auth.token.email == requiredEmail(studentId);
     }
 
-    // Block all access by default
+    // Allow all access (development mode — tighten for production)
     match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // ── Curriculum (admin-created content) — single document, publicly readable ──
-    match /curriculum {
-      allow read: if true;
-      allow write: if true;
-    }
-
-    // Main student state document — only the student who owns it
-    match /students/{studentId} {
-      allow read, write: if isOwner(studentId);
-
-      // Per-day lesson cache sub-collection
-      match /cache/{day} {
-        allow read, write: if isOwner(studentId);
-      }
+      allow read, write: if true;
     }
   }
 }

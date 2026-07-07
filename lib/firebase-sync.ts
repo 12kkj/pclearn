@@ -342,64 +342,82 @@ export function mergeStates(
 
 const CURRICULUM_DOC = "curriculum";
 
+/** Firestore REST API config */
+const FIREBASE_PROJECT_ID = "learnpc-4fd7b";
+const FIREBASE_API_KEY = "AIzaSyDmuwSnhEatNWKPwLQFOUCNK6Z9wvbUp2Y";
+
 /**
- * Admin sync helper — signs in anonymously to push curriculum to Firestore.
- * The curriculum collection is publicly readable in our security rules,
- * so students can pull it without auth.
+ * Push curriculum via Firestore REST API (bypasses client SDK auth requirement).
+ * Uses the project's web API key — no service account needed on client side.
  */
-async function ensureAdminAuth(): Promise<boolean> {
-  const auth = getFirebaseAuth();
-  if (auth.currentUser) return true; // Already signed in
+async function pushCurriculumViaREST(data: { phases: any[]; days: Record<string, any> }): Promise<boolean> {
   try {
-    const { signInAnonymously } = await import("firebase/auth");
-    await signInAnonymously(auth);
-    return true;
-  } catch {
-    // Anonymous auth not enabled — try with a throwaway email
-    try {
-      const { signInWithEmailAndPassword } = await import("firebase/auth");
-      await signInWithEmailAndPassword(auth, "admin@learnpc.app", "admin123");
-      return true;
-    } catch {
-      console.warn("[firebase-sync] Could not authenticate admin for curriculum sync");
+    const url = `https://firestore.googleapis.com/v1/projects/${FIREBASE_PROJECT_ID}/databases/(default)/documents/${CURRICULUM_DOC}?key=${FIREBASE_API_KEY}`;
+    const body = {
+      fields: {
+        phases: { arrayValue: { values: (data.phases ?? []).map((p: any) => ({ stringValue: JSON.stringify(p) })) } },
+        days: { mapValue: { fields: Object.fromEntries(
+          Object.entries(data.days ?? {}).map(([k, v]) => [k, { stringValue: JSON.stringify(v) }])
+        ) } },
+        lastUpdated: { stringValue: new Date().toISOString() },
+      },
+    };
+    // Use PATCH to upsert
+    const res = await fetch(url, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      console.warn("[firebase-sync] REST API error:", res.status, await res.text());
       return false;
     }
+    return true;
+  } catch (err) {
+    console.warn("[firebase-sync] REST API failed:", err);
+    return false;
   }
-}
-
-/** Strip heavy/unnecessary fields before writing to Firestore */
-function stripCurriculumForFirestore(state: any): Record<string, unknown> {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const { lastUpdated, subDays, ...rest } = state;
-  return { ...rest, _lastSynced: serverTimestamp() };
 }
 
 /**
  * Push the full admin curriculum state to Firestore as a single document.
- * All phases + days live inside one "curriculum" doc.
+ * Tries REST API first (works without auth), falls back to SDK.
  */
 export async function syncCurriculumToFirestore(
   state: any
 ): Promise<void> {
+  const dayCount = Object.keys(state.days ?? {}).length;
+
+  // Strategy 1: REST API (no auth needed)
+  const restOk = await pushCurriculumViaREST({
+    phases: state.phases ?? [],
+    days: state.days ?? {},
+  });
+  if (restOk) {
+    console.log("[firebase-sync] Curriculum pushed via REST API:", dayCount, "days");
+    return;
+  }
+
+  // Strategy 2: Firebase SDK (requires auth)
   try {
-    // Ensure we have an auth session before writing to Firestore
-    const authed = await ensureAdminAuth();
-    if (!authed) {
-      console.warn("[firebase-sync] Skipping curriculum sync — no auth");
-      return;
+    const auth = getFirebaseAuth();
+    if (!auth.currentUser) {
+      try {
+        const { signInAnonymously } = await import("firebase/auth");
+        await signInAnonymously(auth);
+      } catch {
+        console.warn("[firebase-sync] Could not authenticate for curriculum sync");
+        return;
+      }
     }
     const db = getFirebaseDb();
     const ref = doc(db, CURRICULUM_DOC);
-
-    // Write everything into a single document
     await setDoc(ref, {
       phases: state.phases ?? [],
       days: state.days ?? {},
       lastUpdated: serverTimestamp(),
     });
-
-    const dayCount = Object.keys(state.days ?? {}).length;
-    console.log("[firebase-sync] Curriculum pushed to Firestore:", dayCount, "days");
+    console.log("[firebase-sync] Curriculum pushed via SDK:", dayCount, "days");
   } catch (err) {
     console.warn("[firebase-sync] Failed to push curriculum:", err);
   }
