@@ -279,10 +279,7 @@ export default function VideoPlayerModal({ videoId, videoTitle, channelName, onC
         backdropFilter: "blur(8px)",
         display: "flex",
         flexDirection: "column",
-        justifyContent: "center",
-        alignItems: "center",
-        padding: "env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)",
-        overflow: "auto",
+        overflow: "hidden",
       }}>
       {/* ── Header ── */}
       <div style={{
@@ -311,10 +308,11 @@ export default function VideoPlayerModal({ videoId, videoTitle, channelName, onC
       {/* ── Body ── */}
       {/* Wrapper to constrain modal content width and center it */}
       <div style={{
-        maxWidth: "min(1100px, 98vw)",
+        flex: 1,
+        minHeight: 0,
         width: "100%",
+        maxWidth: 1200,
         margin: "0 auto",
-        height: "100%",
         display: "flex",
         flexDirection: "column",
         overflow: "hidden",
@@ -330,10 +328,7 @@ export default function VideoPlayerModal({ videoId, videoTitle, channelName, onC
               background: "#000",
               flexShrink: 0,
               width: "100%",
-              maxWidth: "min(680px, 92vw)",
-              margin: "0 auto",
               aspectRatio: "16 / 9",
-              maxHeight: "min(55vh, 420px)",
             }}
             className="vp-player-box"
           >
