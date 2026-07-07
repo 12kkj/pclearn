@@ -596,40 +596,21 @@ function PipelineView({ curriculum, onSelectDay }: { curriculum: AdminCurriculum
 }
 
 // ── Model Test Panel ──────────────────────────────────────────────────────
-function ModelTestPanel() {
+function ModelTestPanel({ results, testing, onTest, modelSel, onModelSel, promptText, onPromptChange }: {
+  results: AdminModelTest[]; testing: boolean;
+  onTest: () => void; modelSel: ModelId; onModelSel: (m: ModelId) => void;
+  promptText: string; onPromptChange: (t: string) => void;
+}) {
   const modelEntries = Object.entries(MODELS) as [string, ModelId][];
-  const [sel, setSel] = useState<ModelId>(modelEntries[0]?.[1] ?? "");
-  const [prompt, setPrompt] = useState("Explain what a variable is in Python in 2 sentences.");
-  const [results, setResults] = useState<AdminModelTest[]>(() => {
-    try { return JSON.parse(localStorage.getItem("csa_admin_model_tests") ?? "[]"); } catch { return []; }
-  });
-  const [testing, setTesting] = useState(false);
-
-  // Persist results to localStorage
-  useEffect(() => {
-    try { localStorage.setItem("csa_admin_model_tests", JSON.stringify(results.slice(0, 50))); } catch { /* quota */ }
-  }, [results]);
-
-  const handleTest = async () => {
-    if (!sel || testing) return;
-    setTesting(true);
-    try {
-      const res = await fetch("/api/tutor", { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "admin_test_model", model: sel, message: prompt }) });
-      const data = await res.json();
-      setResults(prev => [{ ...data, prompt }, ...prev].slice(0, 20));
-    } catch { setResults(prev => [{ modelId: sel, prompt, success: false, error: "Network error" }, ...prev].slice(0, 20)); }
-    setTesting(false);
-  };
 
   return (
     <div>
       <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 12 }}>🧪 Test AI Models</h2>
-      <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>Test any AI model to verify it works.</p>
+      <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", marginBottom: 16 }}>Test any AI model to verify it works. Tests run in the background — switch tabs freely.</p>
       <div style={{ display: "flex", flexDirection: "column", gap: 12, maxWidth: 600 }}>
         <div>
           <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Model</label>
-          <select className="input-field" value={sel} onChange={e => setSel(e.target.value as ModelId)}>
+          <select className="input-field" value={modelSel} onChange={e => onModelSel(e.target.value as ModelId)}>
             {modelEntries.map(([key, val]) => (
               <option key={val} value={val}>{MODEL_INFO[val]?.name ?? key} ({val})</option>
             ))}
@@ -637,9 +618,9 @@ function ModelTestPanel() {
         </div>
         <div>
           <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Test Prompt</label>
-          <textarea className="input-field" value={prompt} onChange={e => setPrompt(e.target.value)} rows={2} style={{ resize: "vertical" }} />
+          <textarea className="input-field" value={promptText} onChange={e => onPromptChange(e.target.value)} rows={2} style={{ resize: "vertical" }} />
         </div>
-        <button className="btn-primary" onClick={handleTest} disabled={!sel || testing} style={{ alignSelf: "flex-start" }}>
+        <button className="btn-primary" onClick={onTest} disabled={!modelSel || testing} style={{ alignSelf: "flex-start" }}>
           {testing ? <><Loader2 size={14} className="animate-spin" /> Testing...</> : <><TestTube2 size={14} /> Run Test</>}
         </button>
       </div>
@@ -668,6 +649,33 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeSection, setActiveSection] = useState<"days" | "phases" | "pipeline" | "generator" | "test" | "export">("days");
   const [generatingCurriculum, setGeneratingCurriculum] = useState(false);
+
+  // ── Model Test state (lifted here so it survives section switches) ──
+  const modelEntries = Object.entries(MODELS) as [string, ModelId][];
+  const [modelTestSel, setModelTestSel] = useState<ModelId>(modelEntries[0]?.[1] ?? "");
+  const [modelTestPrompt, setModelTestPrompt] = useState("Explain what a variable is in Python in 2 sentences.");
+  const [modelTestResults, setModelTestResults] = useState<AdminModelTest[]>(() => {
+    try { return JSON.parse(localStorage.getItem("csa_admin_model_tests") ?? "[]"); } catch { return []; }
+  });
+  const [modelTestRunning, setModelTestRunning] = useState(false);
+
+  useEffect(() => {
+    try { localStorage.setItem("csa_admin_model_tests", JSON.stringify(modelTestResults.slice(0, 50))); } catch { /* quota */ }
+  }, [modelTestResults]);
+
+  const handleModelTest = useCallback(async () => {
+    if (!modelTestSel || modelTestRunning) return;
+    setModelTestRunning(true);
+    try {
+      const res = await fetch("/api/tutor", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "admin_test_model", model: modelTestSel, message: modelTestPrompt }) });
+      const data = await res.json();
+      setModelTestResults(prev => [{ ...data, prompt: modelTestPrompt }, ...prev].slice(0, 50));
+    } catch {
+      setModelTestResults(prev => [{ modelId: modelTestSel, prompt: modelTestPrompt, success: false, error: "Network error" }, ...prev].slice(0, 50));
+    }
+    setModelTestRunning(false);
+  }, [modelTestSel, modelTestPrompt, modelTestRunning]);
 
   useEffect(() => { saveAdminCurriculum(curriculum); }, [curriculum]);
 
@@ -848,7 +856,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
         {activeSection === "phases" && <div style={{ maxWidth: 800, margin: "0 auto" }}><PhaseManager curriculum={curriculum} onPhasesChange={(phases) => setCurriculum(prev => ({ ...prev, phases }))} /></div>}
         {activeSection === "pipeline" && <div style={{ maxWidth: 1200, margin: "0 auto" }}><PipelineView curriculum={curriculum} onSelectDay={(d) => { setSelectedDay(d); setActiveSection("days"); }} /></div>}
         {activeSection === "generator" && <div style={{ maxWidth: 800, margin: "0 auto" }}><CurriculumGenerator onGenerate={handleGenerateFullCurriculum} generating={generatingCurriculum} /></div>}
-        {activeSection === "test" && <div style={{ maxWidth: 800, margin: "0 auto" }}><ModelTestPanel /></div>}
+        {activeSection === "test" && <div style={{ maxWidth: 800, margin: "0 auto" }}><ModelTestPanel results={modelTestResults} testing={modelTestRunning} onTest={handleModelTest} modelSel={modelTestSel} onModelSel={setModelTestSel} promptText={modelTestPrompt} onPromptChange={setModelTestPrompt} /></div>}
         {activeSection === "export" && (
           <div style={{ maxWidth: 600, margin: "0 auto" }}>
             <h2 style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--text)", marginBottom: 16 }}>📦 Import / Export</h2>
