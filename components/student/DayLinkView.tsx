@@ -232,6 +232,8 @@ export default function DayLinkView({
   const [activeVideo, setActiveVideo] = useState<number>(-1);
   const [watchedVideos, setWatchedVideos] = useState<Set<number>>(new Set());
   const [bottomTab, setBottomTab] = useState<"transcript" | "ai" | "quiz" | "none">("none");
+  // Responsive handling: adjust layout for small screens
+  const [isMobile, setIsMobile] = useState<boolean>(false);
   const [currentTranscript, setCurrentTranscript] = useState("");
   const [loadingTranscript, setLoadingTranscript] = useState(false);
 
@@ -250,6 +252,14 @@ export default function DayLinkView({
       setActiveVideo(0);
     }
   }, [hasVideos, quizOnly]); // eslint-disable-line
+
+  // Detect mobile screen size for responsive layout
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 640);
+    checkMobile();
+    window.addEventListener("resize", checkMobile);
+    return () => window.removeEventListener("resize", checkMobile);
+  }, []);
 
   // Advance on external close
   useEffect(() => {
@@ -347,91 +357,93 @@ export default function DayLinkView({
       </div>
 
       {/* ── Main: Player + Sidebar ─────────────────────────────────────── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0 }}>
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0, flexDirection: isMobile ? "column" : "row" }}>
 
         {/* ── Left: Player + Below Panel ───────────────────────────────── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0 }}>
 
           {activeVideo >= 0 && currentVideo ? (
             <>
-              {/* ── Video Player (fixed height, not flex) ── */}
-              <div style={{ flexShrink: 0, background: "#000" }}>
-                <div style={{ position: "relative", width: "100%", paddingBottom: "56.25%" }}>
-                  <iframe
-                    src={`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&rel=0&modestbranding=1`}
-                    title={currentVideo.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }}
-                  />
-                </div>
+              {/* ── Video Player (capped height) ── */}
+              <div style={{ flexShrink: 0, background: "#000", maxHeight: isMobile ? "30vh" : "45vh", width: "100%", position: "relative" }}>
+                <iframe
+                  src={`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&rel=0&modestbranding=1`}
+                  title={currentVideo.title}
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }}
+                />
               </div>
 
-              {/* ── Below Video: Title + Action Bar ── */}
+              {/* ── Below Video: Title + Actions + Toolbar ── */}
               <div style={{
-                padding: "10px 14px", background: "var(--surface)", borderBottom: "1px solid var(--border)",
+                padding: "8px 14px", background: "var(--surface)", borderBottom: "1px solid var(--border)",
                 flexShrink: 0,
               }}>
-                {/* Video title */}
-                <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)", marginBottom: 8, lineHeight: 1.3 }}>
-                  {currentVideo.title}
-                </p>
-                {currentVideo.channelName && (
-                  <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: 10 }}>
-                    {currentVideo.channelName}
+                {/* Title + channel on one line */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                  <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {currentVideo.title}
                   </p>
-                )}
+                  {currentVideo.channelName && (
+                    <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", flexShrink: 0 }}>
+                      {currentVideo.channelName}
+                    </span>
+                  )}
+                </div>
 
-                {/* Action buttons row */}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+                {/* One row: Prev + Next + Full Screen + toolbar buttons */}
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
                   {activeVideo > 0 && (
                     <button onClick={prevVideo} style={{
-                      padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)",
-                      background: "var(--surface2)", color: "var(--text)", fontSize: "0.8rem", fontWeight: 600,
-                      cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+                      padding: "8px 14px", borderRadius: 6, border: "1px solid var(--border)",
+                      background: "var(--surface2)", color: "var(--text)", fontSize: "0.85rem", fontWeight: 600,
+                      cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
                     }}>
-                      <SkipBack size={14} /> Prev
+                      <SkipBack size={12} /> Prev
                     </button>
                   )}
                   {activeVideo < videoLinks.length - 1 && (
                     <button onClick={skipVideo} style={{
-                      padding: "8px 14px", borderRadius: 8,
+                      padding: "8px 14px", borderRadius: 6,
                       background: "linear-gradient(135deg, #ef4444, #dc2626)",
-                      color: "#fff", fontSize: "0.8rem", fontWeight: 600, border: "none",
-                      cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
+                      color: "#fff", fontSize: "0.85rem", fontWeight: 600, border: "none",
+                      cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
                     }}>
-                      <SkipForward size={14} /> Next
+                      <SkipForward size={12} /> Next
                     </button>
                   )}
-                  <a href={`https://pclearn.vercel.app/?day=${day}`} target="_blank" rel="noopener noreferrer"
-                    style={{
-                      padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)",
-                      background: "var(--surface2)", color: "var(--text-muted)", fontSize: "0.8rem", fontWeight: 600,
-                      textDecoration: "none", display: "flex", alignItems: "center", gap: 5,
-                    }}>
-                    <Globe size={14} /> Full Screen
+                    <a href={`https://pclearn.vercel.app/?day=${day}`} target="_blank" rel="noopener noreferrer"
+                      style={{
+                        padding: "8px 14px", borderRadius: 6, border: "1px solid var(--border)",
+                        background: "var(--surface2)", color: "var(--text-muted)", fontSize: "0.85rem", fontWeight: 600,
+                        textDecoration: "none", display: "flex", alignItems: "center", gap: 4,
+                      }}>
+                    <Globe size={12} /> Full Screen
                   </a>
-                </div>
-
-                {/* Bottom panel toggle buttons */}
-                <div style={{ display: "flex", gap: 6 }}>
-                  {[
-                    { id: "transcript" as const, label: "📄 Transcript", color: "var(--text2)", activeColor: "rgba(6,182,212,0.15)", activeBorder: "#06b6d4" },
-                    { id: "ai" as const, label: "🤖 Ask AI", color: "var(--text2)", activeColor: "rgba(99,102,241,0.15)", activeBorder: "var(--brand)" },
-                    { id: "quiz" as const, label: "🧪 Quiz", color: "var(--text2)", activeColor: "rgba(139,92,246,0.15)", activeBorder: "#8b5cf6" },
+                  <div style={{ width: 1, height: 18, background: "var(--border)", flexShrink: 0 }} />
+                  {/* Toolbar toggles */}
+                  {[{ id: "transcript" as const, label: "📄 Transcript", activeColor: "rgba(6,182,212,0.15)", activeBorder: "#06b6d4" },
+                    { id: "ai" as const, label: "🤖 Ask AI", activeColor: "rgba(99,102,241,0.15)", activeBorder: "var(--brand)" },
+                    { id: "quiz" as const, label: "🧪 Quiz", activeColor: "rgba(139,92,246,0.15)", activeBorder: "#8b5cf6" },
                   ].map(t => (
-                    <button key={t.id} onClick={() => {
-                      const next = bottomTab === t.id ? "none" : t.id;
-                      setBottomTab(next);
-                      if (next === "quiz" && !quiz && !quizLoading) onLoadQuiz();
-                    }} style={{
-                      padding: "8px 14px", borderRadius: 8,
-                      border: `1.5px solid ${bottomTab === t.id ? t.activeBorder : "var(--border)"}`,
-                      background: bottomTab === t.id ? t.activeColor : "var(--surface2)",
-                      color: bottomTab === t.id ? t.activeBorder : t.color,
-                      fontSize: "0.8rem", fontWeight: 600, cursor: "pointer",
-                      display: "flex", alignItems: "center", gap: 5,
-                    }}>
+                      <button key={t.id} onClick={() => {
+                        const next = bottomTab === t.id ? "none" : t.id;
+                        setBottomTab(next);
+                        if (next === "quiz" && !quiz && !quizLoading) onLoadQuiz();
+                      }} style={{
+                        padding: "8px 14px",
+                        borderRadius: 6,
+                        border: `1.5px solid ${bottomTab === t.id ? t.activeBorder : "var(--border)"}`,
+                        background: bottomTab === t.id ? t.activeColor : "var(--surface2)",
+                        color: bottomTab === t.id ? t.activeBorder : "var(--text2)",
+                        fontSize: "0.85rem",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 4,
+                      }}>
                       {t.label}
                     </button>
                   ))}
@@ -553,19 +565,19 @@ export default function DayLinkView({
         {/* ── Right: Playlist Sidebar ── */}
         {hasVideos && (
           <div style={{
-            width: 280, flexShrink: 0, borderLeft: "1px solid var(--border)",
+            width: isMobile ? "100%" : 280, flexShrink: 0, borderLeft: isMobile ? "none" : "1px solid var(--border)",
             background: "var(--surface)", display: "flex", flexDirection: "column", overflow: "hidden",
           }}>
             {/* Header */}
             <div style={{
-              padding: "10px 14px", borderBottom: "1px solid var(--border)",
+              padding: "8px 12px", borderBottom: "1px solid var(--border)",
               display: "flex", alignItems: "center", justifyContent: "space-between",
             }}>
-              <span style={{ fontSize: "0.8rem", fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center", gap: 5 }}>
-                <List size={14} /> Playlist
+              <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center", gap: 4 }}>
+                <List size={12} /> Playlist
               </span>
-              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                {watchedVideos.size}/{videoLinks.length} watched
+              <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+                {watchedVideos.size}/{videoLinks.length}
               </span>
             </div>
 
@@ -575,11 +587,11 @@ export default function DayLinkView({
               {watchedVideos.size > 0 && (
                 <div>
                   <div style={{
-                    padding: "6px 14px", fontSize: "0.68rem", fontWeight: 700, color: "#10b981",
+                    padding: "4px 12px", fontSize: "0.62rem", fontWeight: 700, color: "#10b981",
                     textTransform: "uppercase" as const, letterSpacing: "0.05em",
-                    display: "flex", alignItems: "center", gap: 4,
+                    display: "flex", alignItems: "center", gap: 3,
                   }}>
-                    <CheckCircle2 size={11} /> Watched
+                    <CheckCircle2 size={10} /> Watched
                   </div>
                   {videoLinks.map((link, idx) => {
                     if (!watchedVideos.has(idx)) return null;
@@ -587,14 +599,14 @@ export default function DayLinkView({
                     return (
                       <div key={link.id} onClick={() => playVideo(idx)}
                         style={{
-                          display: "flex", alignItems: "center", gap: 10,
-                          padding: "8px 14px", cursor: "pointer",
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "5px 12px", cursor: "pointer",
                           borderBottom: "1px solid var(--border)", opacity: 0.6, transition: "opacity 0.15s",
                         }}
                         onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
                         onMouseLeave={e => (e.currentTarget.style.opacity = "0.6")}>
                         <div style={{
-                          width: 52, height: 36, borderRadius: 6, overflow: "hidden", flexShrink: 0,
+                          width: 44, height: 32, borderRadius: 4, overflow: "hidden", flexShrink: 0,
                           position: "relative", background: "var(--surface3)",
                         }}>
                           {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
@@ -602,11 +614,11 @@ export default function DayLinkView({
                             position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
                             background: "rgba(16,185,129,0.4)",
                           }}>
-                            <CheckCircle2 size={13} color="#fff" />
+                            <CheckCircle2 size={11} color="#fff" />
                           </div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: "0.75rem", fontWeight: 500, color: "var(--text-muted)", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <p style={{ fontSize: "0.7rem", fontWeight: 500, color: "var(--text-muted)", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {link.title}
                           </p>
                         </div>
@@ -620,11 +632,11 @@ export default function DayLinkView({
               <div>
                 {watchedVideos.size > 0 && (
                   <div style={{
-                    padding: "6px 14px", fontSize: "0.68rem", fontWeight: 700, color: "var(--text-muted)",
+                    padding: "4px 12px", fontSize: "0.62rem", fontWeight: 700, color: "var(--text-muted)",
                     textTransform: "uppercase" as const, letterSpacing: "0.05em",
-                    display: "flex", alignItems: "center", gap: 4,
+                    display: "flex", alignItems: "center", gap: 3,
                   }}>
-                    <Clock size={11} /> Up Next
+                    <Clock size={10} /> Up Next
                   </div>
                 )}
                 {videoLinks.map((link, idx) => {
@@ -634,8 +646,8 @@ export default function DayLinkView({
                   return (
                     <div key={link.id} onClick={() => playVideo(idx)}
                       style={{
-                        display: "flex", alignItems: "center", gap: 10,
-                        padding: "8px 14px", cursor: "pointer",
+                        display: "flex", alignItems: "center", gap: 8,
+                        padding: "5px 12px", cursor: "pointer",
                         background: isPlaying ? "rgba(239,68,68,0.08)" : "transparent",
                         borderLeft: isPlaying ? "3px solid #ef4444" : "3px solid transparent",
                         borderBottom: "1px solid var(--border)", transition: "all 0.15s",
