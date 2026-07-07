@@ -270,8 +270,7 @@ export default function VideoPlayerModal({ videoId, videoTitle, channelName, onC
   ];
 
   // ─── Render ────────────────────────────────────────────────────────────────
-  return (
-      {/* Modal overlay – responsive with padding for small screens */}
+    return (
       <div style={{
         position: "fixed",
         inset: 0,
@@ -312,11 +311,13 @@ export default function VideoPlayerModal({ videoId, videoTitle, channelName, onC
       {/* ── Body ── */}
       {/* Wrapper to constrain modal content width and center it */}
       <div style={{
-        maxWidth: "1000px",
+        maxWidth: "min(1100px, 98vw)",
+        width: "100%",
         margin: "0 auto",
         height: "100%",
         display: "flex",
         flexDirection: "column",
+        overflow: "hidden",
       }}>
         <div className="vp-layout">
         {/* ── Left: Player + Controls ── */}
@@ -329,10 +330,10 @@ export default function VideoPlayerModal({ videoId, videoTitle, channelName, onC
               background: "#000",
               flexShrink: 0,
               width: "100%",
-              maxWidth: "800px",
+              maxWidth: "min(680px, 92vw)",
               margin: "0 auto",
               aspectRatio: "16 / 9",
-              maxHeight: "80vh",
+              maxHeight: "min(55vh, 420px)",
             }}
             className="vp-player-box"
           >
@@ -705,5 +706,6 @@ export default function VideoPlayerModal({ videoId, videoTitle, channelName, onC
         </div>
       </div>
     </div>
-  );
+  </div>
+);
 }
