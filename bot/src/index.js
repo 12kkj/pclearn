@@ -446,14 +446,8 @@ function formatDayMessage(day, dayData, isCompleted) {
   let msg = `📅 *Day ${day}: ${dayData.title || "Untitled"}*\n`;
   if (isCompleted) msg += `✅ *Completed*\n`;
   if (dayData.description) msg += `📋 ${dayData.description}\n`;
-  msg += `\n`;
 
   const resources = dayData.resources || [];
-  resources.forEach((link, i) => {
-    const icon = link.type === "youtube" ? "🎬" : "🔗";
-    msg += `${icon} [${link.title || link.url}](${link.url})\n`;
-  });
-
   if (resources.length === 0) msg += `_No links yet._\n`;
 
   return msg;
