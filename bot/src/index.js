@@ -444,32 +444,17 @@ function buildContextKeyboard() {
 
 function formatDayMessage(day, dayData, isCompleted) {
   let msg = `📅 *Day ${day}: ${dayData.title || "Untitled"}*\n`;
-  msg += `📋 ${dayData.description || ""}\n`;
   if (isCompleted) msg += `✅ *Completed*\n`;
+  if (dayData.description) msg += `📋 ${dayData.description}\n`;
   msg += `\n`;
 
-  const ytLinks = (dayData.resources || []).filter(r => r.type === "youtube");
-  if (ytLinks.length > 0) {
-    msg += `🎬 *Videos (${ytLinks.length}):*\n`;
-    ytLinks.forEach((link, i) => {
-      msg += `${i + 1}. [${link.title || "Video"}](${link.url})`;
-      if (link.channelName) msg += ` — _${link.channelName}_`;
-      msg += `\n`;
-    });
-    msg += `\n`;
-  }
+  const resources = dayData.resources || [];
+  resources.forEach((link, i) => {
+    const icon = link.type === "youtube" ? "🎬" : "🔗";
+    msg += `${icon} [${link.title || link.url}](${link.url})\n`;
+  });
 
-  const webLinks = (dayData.resources || []).filter(r => r.type !== "youtube");
-  if (webLinks.length > 0) {
-    msg += `🔗 *Read More (${webLinks.length}):*\n`;
-    webLinks.forEach((link, i) => {
-      msg += `${i + 1}. [${link.title || "Article"}](${link.url})\n`;
-    });
-    msg += `\n`;
-  }
-
-  const totalResources = ytLinks.length + webLinks.length;
-  msg += `📊 ${totalResources} resource${totalResources !== 1 ? "s" : ""} total\n`;
+  if (resources.length === 0) msg += `_No links yet._\n`;
 
   return msg;
 }
