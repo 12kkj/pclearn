@@ -9,7 +9,39 @@ import { getDoc, setDoc, updateDoc } from "./firestore";
 
 // ── Config ────────────────────────────────────────────────────────────────
 
-const PASS_THRESHOLD = 70;
+const PASS_THRESHOLD = 67;
+
+// ── Helper: deep-parse JSON strings from Firestore (REST API stores objects as JSON strings) ──
+
+function deepParseJson(obj) {
+  if (typeof obj === "string") {
+    try { return JSON.parse(obj); } catch { return obj; }
+  }
+  if (Array.isArray(obj)) return obj.map(deepParseJson);
+  if (obj && typeof obj === "object") {
+    const out = {};
+    for (const [k, v] of Object.entries(obj)) out[k] = deepParseJson(v);
+    return out;
+  }
+  return obj;
+}
+
+/** Parse curriculum document from Firestore — handles JSON-stringified phases & days */
+function parseCurriculum(raw) {
+  if (!raw) return raw;
+  const out = { ...raw };
+  if (out.phases) out.phases = (out.phases ?? []).map(p => deepParseJson(p));
+  if (out.days) {
+    const parsed = {};
+    for (const [k, v] of Object.entries(out.days)) parsed[k] = deepParseJson(v);
+    out.days = parsed;
+  }
+  return out;
+}
+
+// ── Web app URL ──────────────────────────────────────────────────────────────
+
+const WEB_URL = "https://pclearn.vercel.app";
 
 // ── Helper: get Firebase SA from env ──────────────────────────────────────
 
@@ -22,6 +54,14 @@ function getSA(env) {
 
 const CURRICULUM_DOC = "curriculum/data";
 const userDoc = (id) => `bot_users/${id}`;
+
+/** Load & parse curriculum from Firestore (handles JSON-stringified data from web REST API) */
+async function getCurriculum(env) {
+  const sa = getSA(env);
+  const projectId = env.FIREBASE_PROJECT_ID;
+  const raw = await getDoc(sa, projectId, CURRICULUM_DOC);
+  return parseCurriculum(raw) || { phases: [], days: {} };
+}
 
 // ── Admin check ───────────────────────────────────────────────────────────
 
@@ -256,7 +296,7 @@ function createBot(env) {
       await setDoc(sa, projectId, userDoc(userId), user);
     }
 
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+    const curriculum = await getCurriculum(env);
     const days = curriculum?.days ?? {};
     const totalDays = Object.keys(days).length || 0;
     const day = user.currentDay;
@@ -330,7 +370,7 @@ function createBot(env) {
       const sa = getSA(env);
       const projectId = env.FIREBASE_PROJECT_ID;
       const user = await getDoc(sa, projectId, userDoc(userId));
-      const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+      const curriculum = await getCurriculum(env);
 
       let userContext = "";
       if (user) {
@@ -378,7 +418,7 @@ function createBot(env) {
           await ctx.reply("Send /start to begin! 🎓");
           return;
         }
-        const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+        const curriculum = await getCurriculum(env);
         const totalDays = Object.keys(curriculum?.days ?? {}).length || 0;
         const day = user.currentDay;
         const completed = user.completedDays?.length || 0;
@@ -490,7 +530,7 @@ function createBot(env) {
     }
 
     const day = dayNum || user.currentDay;
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+    const curriculum = await getCurriculum(env);
     const dayData = curriculum?.days?.[String(day)];
 
     if (!dayData) {
@@ -502,12 +542,17 @@ function createBot(env) {
       return;
     }
 
+    const completed = user.completedDays || [];
+    const isCompleted = completed.includes(day);
+
     let msg = `📅 *Day ${day}: ${dayData.title || "Untitled"}*\n`;
-    msg += `📋 ${dayData.description || ""}\n\n`;
+    msg += `📋 ${dayData.description || ""}\n`;
+    if (isCompleted) msg += `✅ *Completed*\n`;
+    msg += `\n`;
 
     const ytLinks = (dayData.resources || []).filter(r => r.type === "youtube");
     if (ytLinks.length > 0) {
-      msg += `🎬 *Watch Videos:*\n`;
+      msg += `🎬 *Videos (${ytLinks.length}):*\n`;
       ytLinks.forEach((link, i) => {
         msg += `${i + 1}. [${link.title || "Video"}](${link.url})`;
         if (link.channelName) msg += ` — _${link.channelName}_`;
@@ -518,29 +563,29 @@ function createBot(env) {
 
     const webLinks = (dayData.resources || []).filter(r => r.type !== "youtube");
     if (webLinks.length > 0) {
-      msg += `🔗 *Read More:*\n`;
+      msg += `🔗 *Read More (${webLinks.length}):*\n`;
       webLinks.forEach((link, i) => {
         msg += `${i + 1}. [${link.title || "Article"}](${link.url})\n`;
       });
       msg += `\n`;
     }
 
-    const shareText = encodeURIComponent(
-      `📚 Day ${day}: ${dayData.title || "Check this out!"}\n\n` +
-      `Watch: ${ytLinks[0]?.url || webLinks[0]?.url || ""}\n\n— Computer Skills Academy`
-    );
-    const shareUrl = `https://api.whatsapp.com/send?text=${shareText}`;
+    const totalResources = ytLinks.length + webLinks.length;
+    msg += `📊 ${totalResources} resource${totalResources !== 1 ? "s" : ""} total\n`;
+
+    const webDayUrl = `${WEB_URL}/?day=${day}`;
+    const webQuizUrl = `${WEB_URL}/?day=${day}&quiz=true`;
 
     const kb = new InlineKeyboard()
-      .text("🧪 Take Quiz", `quiz_${day}`)
+      .url(`📖 Open in Browser`, webDayUrl)
       .row()
-      .url("📤 Share to WhatsApp", shareUrl)
+      .text("🧪 Take Quiz", `quiz_${day}`)
       .row()
       .text("🤖 Ask AI about this", `ask_day_${day}`)
       .row()
       .text("◀️ Back to Menu", "back_menu");
 
-    await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb, disable_web_page_preview: false });
+    await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb, disable_web_page_preview: true });
   }
 
   // ══════════════════════════════════════════════════════════════════════
@@ -554,7 +599,7 @@ function createBot(env) {
     const sa = getSA(env);
     const projectId = env.FIREBASE_PROJECT_ID;
 
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+    const curriculum = await getCurriculum(env);
     const dayData = curriculum?.days?.[String(day)];
     const questions = dayData?.quiz;
 
@@ -585,7 +630,7 @@ function createBot(env) {
     const sa = getSA(env);
     const projectId = env.FIREBASE_PROJECT_ID;
 
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+    const curriculum = await getCurriculum(env);
     const dayData = curriculum?.days?.[String(day)];
     const questions = dayData?.quiz;
 
@@ -681,12 +726,14 @@ function createBot(env) {
     msg += `Score: *${session.correct}/${session.total}* (${pct}%)\n`;
     msg += passed ? `✅ *PASSED!* 🎉\n` : `❌ *Not passed* (need ${PASS_THRESHOLD}%)\n`;
 
+    let nextDay = session.day + 1;
+
     if (passed) {
       let user = await getDoc(sa, projectId, userDoc(userId));
       if (user) {
         const completed = [...new Set([...(user.completedDays || []), session.day])];
         const xpGain = pct >= 90 ? 150 : pct >= 70 ? 100 : 50;
-        const nextDay = session.day + 1;
+        nextDay = session.day + 1;
 
         await updateDoc(sa, projectId, userDoc(userId), {
           completedDays: completed,
@@ -698,7 +745,7 @@ function createBot(env) {
 
         msg += `\n⭐ +${xpGain} XP earned!`;
 
-        const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+        const curriculum = await getCurriculum(env);
         const nextDayData = curriculum?.days?.[String(nextDay)];
         if (nextDayData) {
           msg += `\n\n🔓 *Day ${nextDay} unlocked!* — _${nextDayData.title || "New content"}_`;
@@ -711,16 +758,29 @@ function createBot(env) {
 
     const kb = new InlineKeyboard();
     if (passed) {
-      const nextDay = session.day + 1;
-      const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+      const curriculum = await getCurriculum(env);
       if (curriculum?.days?.[String(nextDay)]) {
-        kb.text(`📚 Go to Day ${nextDay}`, `day_${nextDay}`);
+        // Next day content link (opens in browser with playlist)
+        const nextDayUrl = `${WEB_URL}/?day=${nextDay}`;
+        kb.url(`📚 Day ${nextDay} — Watch & Learn`, nextDayUrl);
+        kb.row();
+        // Quiz-only link for quick assessment
+        const nextDayQuizUrl = `${WEB_URL}/?day=${nextDay}&quiz=true`;
+        kb.url(`🧪 Day ${nextDay} — Quiz Only`, nextDayQuizUrl);
+        kb.row();
+        // Also show next day in chat
+        kb.text(`💬 Show Day ${nextDay} here`, `day_${nextDay}`);
+        kb.row();
       }
     } else {
       kb.text(`🔄 Retry Quiz`, `quiz_${session.day}`);
+      kb.row();
+      const retryQuizUrl = `${WEB_URL}/?day=${session.day}&quiz=true`;
+      kb.url(`🧪 Quiz in Browser`, retryQuizUrl);
+      kb.row();
       kb.text(`📚 Re-watch Videos`, `day_${session.day}`);
+      kb.row();
     }
-    kb.row();
     kb.text("🏠 Menu", "back_menu");
 
     await ctx.reply(msg, { parse_mode: "Markdown", reply_markup: kb });
@@ -776,7 +836,7 @@ function createBot(env) {
       return;
     }
 
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+    const curriculum = await getCurriculum(env);
     const allQuestions = [];
     for (let d = rangeStart; d <= day; d++) {
       const dayQ = curriculum?.days?.[String(d)]?.quiz;
@@ -827,7 +887,7 @@ function createBot(env) {
       return;
     }
 
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+    const curriculum = await getCurriculum(env);
     const totalDays = Object.keys(curriculum?.days ?? {}).length || 0;
     const completed = user.completedDays?.length || 0;
     const pct = totalDays > 0 ? Math.round((completed / totalDays) * 100) : 0;
@@ -869,7 +929,7 @@ function createBot(env) {
       return;
     }
 
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+    const curriculum = await getCurriculum(env);
     const days = curriculum?.days ?? {};
     const phases = curriculum?.phases ?? [];
     const completed = new Set(user.completedDays || []);
@@ -954,7 +1014,7 @@ function createBot(env) {
 
     const sa = getSA(env);
     const projectId = env.FIREBASE_PROJECT_ID;
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+    const curriculum = await getCurriculum(env);
     const dayCount = Object.keys(curriculum?.days ?? {}).length;
 
     const kb = new InlineKeyboard()
@@ -1033,7 +1093,7 @@ function createBot(env) {
       }
     });
 
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC) || { phases: [], days: {} };
+    const curriculum = await getCurriculum(env);
     const days = curriculum.days || {};
     const existing = days[dayNum] || {};
 
@@ -1107,7 +1167,7 @@ function createBot(env) {
     }
     if (currentQ) questions.push(currentQ);
 
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC) || { phases: [], days: {} };
+    const curriculum = await getCurriculum(env);
     const days = curriculum.days || {};
     const existing = days[dayNum] || {};
 
@@ -1132,7 +1192,7 @@ function createBot(env) {
     await ctx.answerCallbackQuery();
     const sa = getSA(env);
     const projectId = env.FIREBASE_PROJECT_ID;
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+    const curriculum = await getCurriculum(env);
     const dayCount = Object.keys(curriculum?.days ?? {}).length;
     const phaseCount = (curriculum?.phases ?? []).length;
 
@@ -1212,7 +1272,7 @@ function createBot(env) {
       return;
     }
 
-    const curriculum = await getDoc(sa, projectId, CURRICULUM_DOC);
+    const curriculum = await getCurriculum(env);
     const totalDays = Object.keys(curriculum?.days ?? {}).length || 0;
     const day = user.currentDay;
     const completed = user.completedDays?.length || 0;

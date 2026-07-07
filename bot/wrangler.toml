@@ -6,7 +6,7 @@ compatibility_date = "2024-12-01"
 # Non-secret config — safe to commit
 FIREBASE_PROJECT_ID = "learnpc-4fd7b"
 ADMIN_TELEGRAM_IDS = "1719425054"
-PASS_THRESHOLD = "70"
+PASS_THRESHOLD = "67"
 MIMO_BASE_URL = "https://opencode.ai/zen/v1"
 MIMO_MODEL = "mimo-v2.5-free"
 

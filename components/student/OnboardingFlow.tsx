@@ -18,7 +18,7 @@ const STEPS = [
   {
     icon: "📝",
     title: "Quizzes & Tests",
-    desc: "After each lesson, take a quiz to test your knowledge. AI generates questions based on what you just learned. Score 70%+ to mark the day complete!",
+    desc: "After each lesson, take a quiz to test your knowledge. AI generates questions based on what you just learned. Score 67%+ to mark the day complete!",
     highlight: "quiz",
   },
   {

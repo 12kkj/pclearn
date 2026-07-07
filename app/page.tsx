@@ -1218,7 +1218,7 @@ function QuizPanel({ quiz, answers, evalResult, onAnswer, onSubmit, onNextLesson
           <div>
             <h2 style={{ fontSize: "1rem", fontWeight: 800, color: "var(--text)", marginBottom: 3 }}>{quiz.title}</h2>
             <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
-              Answer 12 questions — you need 70% (9/12) to unlock Day {day + 1}!
+              Answer 12 questions — you need 67% (8/12) to unlock Day {day + 1}!
             </p>
           </div>
           <button
@@ -1245,7 +1245,7 @@ function QuizPanel({ quiz, answers, evalResult, onAnswer, onSubmit, onNextLesson
               {evalResult.passed ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               {evalResult.passed
                 ? `PASS ✓ ${evalResult.correctCount ?? "?"}/${evalResult.totalQuestions ?? 12}`
-                : `${evalResult.correctCount ?? 0}/${evalResult.totalQuestions ?? 12} — Try Again (Need 70%)`}
+                : `${evalResult.correctCount ?? 0}/${evalResult.totalQuestions ?? 12} — Try Again (Need 67%)`}
             </div>
           )}
         </div>
@@ -1386,7 +1386,7 @@ function QuizPanel({ quiz, answers, evalResult, onAnswer, onSubmit, onNextLesson
             </button>
           ) : (
             <button className="btn-primary" onClick={onSubmit} style={{ flex: 1 }}>
-              <RotateCcw size={15} /> Try Again (Need 70%)
+              <RotateCcw size={15} /> Try Again (Need 67%)
             </button>
           )}
         </div>
@@ -1448,6 +1448,10 @@ export default function Home() {
   const importRef = React.useRef<HTMLInputElement>(null);
   // Quiz is "in progress" once loaded but not yet graded — chat/Ask AI is locked until pass/fail.
   const quizInProgress = !!quiz && !evalResult;
+  // ── URL params (?day=X&quiz=true) for deep-link from Telegram bot ──
+  const [quizOnly, setQuizOnly] = React.useState(false);
+  const urlParamsApplied = React.useRef(false);
+  const [videoCloseTrigger, setVideoCloseTrigger] = React.useState(0);
   // ── Login / Auth ──
   const [isLoggedIn, setIsLoggedIn] = React.useState(false);
   const [currentUser, setCurrentUser] = React.useState<StudentId | null>(null);
@@ -1525,6 +1529,27 @@ export default function Home() {
   React.useEffect(() => {
     try { localStorage.setItem("csa_bookmarks", JSON.stringify(bookmarks)); } catch { /* quota */ }
   }, [bookmarks]);
+
+  /** Handle URL params (?day=X&quiz=true) for Telegram bot deep-links */
+  React.useEffect(() => {
+    if (urlParamsApplied.current || !isLoggedIn || !hydrated) return;
+    const params = new URLSearchParams(window.location.search);
+    const dayParam = params.get("day");
+    const quizParam = params.get("quiz");
+    if (dayParam) {
+      const dayNum = parseInt(dayParam, 10);
+      if (dayNum > 0 && dayNum <= 100) {
+        urlParamsApplied.current = true;
+        setCurrentLessonDay(dayNum);
+        setActiveTab("lesson");
+        if (quizParam === "true") {
+          setQuizOnly(true);
+        }
+        // Clean URL
+        window.history.replaceState({}, "", window.location.pathname);
+      }
+    }
+  }, [isLoggedIn, hydrated]);
 
   const toggleBookmark = React.useCallback((day: number) => {
     setBookmarks(prev => {
@@ -2358,9 +2383,10 @@ export default function Home() {
             answers={answers}
             evalResult={evalResult}
             isSubmitting={isSubmitting}
+            quizOnly={quizOnly}
             onAnswer={(qId, val) => setAnswers(prev => ({ ...prev, [qId]: val }))}
             onSubmitQuiz={submitQuiz}
-            onNextLesson={handleNextLesson}
+            onNextLesson={() => { setQuizOnly(false); handleNextLesson(); }}
             onLoadQuiz={async () => {
               const day = currentLessonDay || learner.currentDay || 1;
               try { await loadQuiz(day); } catch { /* ignore */ }
@@ -2377,6 +2403,8 @@ export default function Home() {
               setVideoPlayerInitialTab("tx");
               setVideoPlayerTarget({ videoId, videoTitle: title, channelName: channel });
             }}
+            onVideoClose={() => setVideoCloseTrigger(n => n + 1)}
+            videoCloseTrigger={videoCloseTrigger}
           />
         )}
 
@@ -2484,7 +2512,7 @@ export default function Home() {
           videoTitle={videoPlayerTarget.videoTitle}
           channelName={videoPlayerTarget.channelName}
           initialTab={videoPlayerInitialTab}
-          onClose={() => setVideoPlayerTarget(null)}
+          onClose={() => { setVideoPlayerTarget(null); setVideoCloseTrigger(n => n + 1); }}
         />
       )}
 

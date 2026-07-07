@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Play, ExternalLink, Youtube, Globe, Sparkles,
   CheckCircle2, Target, ArrowRight, Loader2, RotateCcw,
-  AlertCircle, HelpCircle, ChevronRight,
+  AlertCircle, HelpCircle, ChevronRight, List, SkipForward,
+  Pause, MessageSquare, ExternalLinkIcon,
 } from "lucide-react";
 import type { AdminDayContent, AdminResourceLink } from "@/types";
 import type { LearnerState, QuizQuestion } from "@/types";
@@ -38,6 +39,12 @@ interface Props {
   onStartDay: (day: number) => void;
   onAskAi: (prompt: string) => void;
   onWatchVideo: (videoId: string, title: string, channel: string) => void;
+  /** Called when video player closes — for playlist auto-advance */
+  onVideoClose?: () => void;
+  /** Trigger counter — increments each time video player closes */
+  videoCloseTrigger?: number;
+  /** Quiz-only mode: show only quiz, no video list */
+  quizOnly?: boolean;
 }
 
 // ─── Minimal Link Card ────────────────────────────────────────────────────────
@@ -140,7 +147,7 @@ function QuizView({
       <div className="empty-state">
         <Target size={32} style={{ color: "var(--brand)", margin: "0 auto 12px", opacity: 0.5 }} />
         <p style={{ fontSize: "0.92rem", fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Ready for the quiz?</p>
-        <p style={{ fontSize: "0.82rem", marginBottom: 16 }}>Need 70% to unlock Day {day + 1}</p>
+        <p style={{ fontSize: "0.82rem", marginBottom: 16 }}>Need 67% to unlock Day {day + 1}</p>
         <button onClick={onLoadQuiz} className="watch-btn purple" style={{ maxWidth: 200, margin: "0 auto" }}>
           <Target size={15} /> Start Quiz
         </button>
@@ -162,7 +169,7 @@ function QuizView({
         }}>
           {evalResult.passed ? "🎉" : "💪"} {evalResult.passed
             ? `PASSED — ${evalResult.correctCount}/${evalResult.totalQuestions}`
-            : `${evalResult.correctCount}/${evalResult.totalQuestions} — Need 70%`}
+            : `${evalResult.correctCount}/${evalResult.totalQuestions} — Need 67%`}
         </div>
       )}
 
@@ -287,9 +294,83 @@ export default function DayLinkView({
   day, dayData, learner,
   quiz, quizLoading, answers, evalResult, isSubmitting,
   onAnswer, onSubmitQuiz, onNextLesson, onLoadQuiz,
-  onStartDay, onAskAi, onWatchVideo,
+  onStartDay, onAskAi, onWatchVideo, onVideoClose,
+  videoCloseTrigger = 0,
+  quizOnly = false,
 }: Props) {
-  const [tab, setTab] = useState<"watch" | "quiz">("watch");
+  const [tab, setTab] = useState<"watch" | "quiz">(quizOnly ? "quiz" : "watch");
+  const [playlistIdx, setPlaylistIdx] = useState(-1); // -1 = not playing
+  const [watchedVideos, setWatchedVideos] = useState<Set<number>>(new Set());
+
+  const links = dayData?.resources ?? [];
+  const videoLinks = links.filter(l => l.type === "youtube");
+  const nonVideoLinks = links.filter(l => l.type !== "youtube");
+  const hasLinks = links.length > 0;
+  const hasVideos = videoLinks.length > 0;
+
+  // Auto-load quiz in quiz-only mode
+  useEffect(() => {
+    if (quizOnly && !quiz && !quizLoading) {
+      onLoadQuiz();
+    }
+  }, [quizOnly]);
+
+  // Auto-advance playlist when video player closes
+  useEffect(() => {
+    if (videoCloseTrigger === 0) return; // skip initial
+    if (playlistIdx >= 0 && playlistIdx < videoLinks.length - 1) {
+      // More videos to play — auto-advance after short delay
+      const timer = setTimeout(() => {
+        const nextIdx = playlistIdx + 1;
+        setWatchedVideos(prev => new Set([...prev, playlistIdx]));
+        setPlaylistIdx(nextIdx);
+        const link = videoLinks[nextIdx];
+        const videoId = (() => { try { return new URL(link.url).searchParams.get("v") ?? ""; } catch { return ""; } })();
+        onWatchVideo(videoId, link.title, link.channelName ?? "");
+      }, 800);
+      return () => clearTimeout(timer);
+    } else if (playlistIdx >= 0) {
+      // Last video done — switch to quiz
+      setWatchedVideos(prev => new Set([...prev, playlistIdx]));
+      setPlaylistIdx(-1);
+      setTab("quiz");
+      onLoadQuiz();
+    }
+  }, [videoCloseTrigger]);
+
+  // Playlist: play next video
+  const playNext = useCallback(() => {
+    if (playlistIdx < videoLinks.length - 1) {
+      const nextIdx = playlistIdx + 1;
+      setWatchedVideos(prev => new Set([...prev, playlistIdx]));
+      setPlaylistIdx(nextIdx);
+      const link = videoLinks[nextIdx];
+      const videoId = (() => { try { return new URL(link.url).searchParams.get("v") ?? ""; } catch { return ""; } })();
+      onWatchVideo(videoId, link.title, link.channelName ?? "");
+    } else {
+      // All videos watched — switch to quiz
+      setWatchedVideos(prev => new Set([...prev, playlistIdx]));
+      setPlaylistIdx(-1);
+      setTab("quiz");
+      onLoadQuiz();
+    }
+  }, [playlistIdx, videoLinks, onWatchVideo, onLoadQuiz]);
+
+  // Skip current video in playlist
+  const skipVideo = useCallback(() => {
+    playNext();
+  }, [playNext]);
+
+  // Start playlist from beginning
+  const startPlaylist = useCallback(() => {
+    setPlaylistIdx(0);
+    setWatchedVideos(new Set());
+    const link = videoLinks[0];
+    if (link) {
+      const videoId = (() => { try { return new URL(link.url).searchParams.get("v") ?? ""; } catch { return ""; } })();
+      onWatchVideo(videoId, link.title, link.channelName ?? "");
+    }
+  }, [videoLinks, onWatchVideo]);
 
   if (!day) {
     return (
@@ -303,8 +384,60 @@ export default function DayLinkView({
     );
   }
 
-  const links = dayData?.resources ?? [];
-  const hasLinks = links.length > 0;
+  // Quiz-only mode
+  if (quizOnly) {
+    return (
+      <div style={{ height: "100%", overflowY: "auto" }}>
+        <div style={{ maxWidth: 600, margin: "0 auto", padding: "16px" }}>
+          {/* Compact header */}
+          <div style={{
+            background: "linear-gradient(135deg, #8b5cf6, #6366f1)",
+            borderRadius: 14, padding: "16px 20px", marginBottom: 16, color: "#fff",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              <Target size={20} />
+              <div>
+                <h2 style={{ fontSize: "0.95rem", fontWeight: 800 }}>Day {day} Quiz</h2>
+                <p style={{ fontSize: "0.72rem", opacity: 0.8 }}>{dayData?.title || ""} • Need 67% to pass</p>
+              </div>
+            </div>
+          </div>
+
+          <QuizView
+            quiz={quiz} answers={answers} evalResult={evalResult}
+            onAnswer={onAnswer} onSubmit={onSubmitQuiz} onNextLesson={onNextLesson}
+            isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading}
+          />
+
+          {/* Continue in Telegram */}
+          {evalResult?.passed && (
+            <div style={{
+              marginTop: 20, padding: "14px 16px", borderRadius: 12,
+              background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)",
+              textAlign: "center",
+            }}>
+              <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
+                🎉 Great job! Day {day} completed!
+              </p>
+              <a
+                href={`https://t.me/csalearningbot?start=day${day + 1}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  padding: "8px 16px", borderRadius: 8,
+                  background: "#229ED9", color: "#fff",
+                  fontSize: "0.82rem", fontWeight: 600, textDecoration: "none",
+                }}
+              >
+                💬 Continue in Telegram — Day {day + 1}
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ height: "100%", overflowY: "auto" }}>
@@ -353,12 +486,12 @@ export default function DayLinkView({
           <button onClick={() => setTab("watch")} className={`simple-pill ${tab === "watch" ? "active" : ""}`}>
             <Play size={14} /> Watch & Learn
           </button>
-          <button onClick={() => setTab("quiz")} className={`simple-pill ${tab === "quiz" ? "active" : ""}`}>
+          <button onClick={() => { setTab("quiz"); if (!quiz && !quizLoading) onLoadQuiz(); }} className={`simple-pill ${tab === "quiz" ? "active" : ""}`}>
             <Target size={14} /> Quiz
           </button>
         </div>
 
-        {/* WATCH TAB */}
+        {/* WATCH TAB — with playlist */}
         {tab === "watch" && (
           <div>
             {!hasLinks ? (
@@ -368,18 +501,186 @@ export default function DayLinkView({
                 <p style={{ fontSize: "0.78rem" }}>Ask your teacher to add resources for Day {day}</p>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {links.map((link) => (
-                  <LinkCard
-                    key={link.id}
-                    link={link}
-                    onWatch={() => {
-                      const videoId = (() => { try { return new URL(link.url).searchParams.get("v") ?? ""; } catch { return ""; } })();
-                      onWatchVideo(videoId, link.title, link.channelName ?? "");
-                    }}
-                  />
-                ))}
-              </div>
+              <>
+                {/* Playlist Controls */}
+                {hasVideos && (
+                  <div style={{
+                    display: "flex", alignItems: "center", gap: 8, marginBottom: 14,
+                    padding: "10px 14px", borderRadius: 12,
+                    background: "var(--surface2)", border: "1px solid var(--border)",
+                  }}>
+                    <List size={16} style={{ color: "var(--brand)", flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text)" }}>
+                        {playlistIdx >= 0
+                          ? `Playing ${playlistIdx + 1}/${videoLinks.length}`
+                          : `${videoLinks.length} video${videoLinks.length !== 1 ? "s" : ""} — play all in sequence`
+                        }
+                      </p>
+                      <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
+                        {playlistIdx >= 0 ? "Next video plays automatically after current" : "Videos play one after another, then quiz"}
+                      </p>
+                    </div>
+                    {playlistIdx >= 0 ? (
+                      <div style={{ display: "flex", gap: 4 }}>
+                        <button onClick={skipVideo} style={{
+                          padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)",
+                          background: "var(--surface)", color: "var(--text)", fontSize: "0.72rem",
+                          fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+                        }}>
+                          <SkipForward size={12} /> Skip
+                        </button>
+                      </div>
+                    ) : (
+                      <button onClick={startPlaylist} style={{
+                        padding: "6px 12px", borderRadius: 8,
+                        background: "linear-gradient(135deg, #ef4444, #dc2626)",
+                        color: "#fff", fontSize: "0.72rem", fontWeight: 600,
+                        cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+                        flexShrink: 0,
+                      }}>
+                        <Play size={12} fill="#fff" /> Play All
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {/* Progress dots for playlist */}
+                {playlistIdx >= 0 && hasVideos && (
+                  <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
+                    {videoLinks.map((_, i) => (
+                      <div key={i} style={{
+                        width: 8, height: 8, borderRadius: "50%",
+                        background: i < playlistIdx || watchedVideos.has(i)
+                          ? "#10b981" : i === playlistIdx ? "#ef4444" : "var(--border)",
+                        transition: "background 0.2s",
+                      }} />
+                    ))}
+                  </div>
+                )}
+
+                {/* Video cards */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {videoLinks.map((link, idx) => {
+                    const videoId = (() => { try { return new URL(link.url).searchParams.get("v") ?? ""; } catch { return ""; } })();
+                    const isPlaying = playlistIdx === idx;
+                    const isWatched = watchedVideos.has(idx);
+
+                    return (
+                      <div key={link.id} style={{
+                        ...linkCardStyle,
+                        border: isPlaying
+                          ? "2px solid #ef4444"
+                          : isWatched
+                          ? "2px solid #10b981"
+                          : "1px solid var(--border)",
+                        opacity: isWatched && !isPlaying ? 0.6 : 1,
+                      }}>
+                        {/* Video thumbnail */}
+                        <div style={{ position: "relative", aspectRatio: "16/9", overflow: "hidden" }}>
+                          <img
+                            src={link.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
+                            alt={link.title}
+                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                            onError={(e) => { (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`; }}
+                          />
+                          <button
+                            onClick={() => {
+                              if (playlistIdx >= 0) {
+                                // In playlist mode — jump to this video
+                                setPlaylistIdx(idx);
+                                setWatchedVideos(prev => { const s = new Set(prev); for (let i = idx; i < playlistIdx; i++) s.add(i); return s; });
+                              }
+                              onWatchVideo(videoId, link.title, link.channelName ?? "");
+                            }}
+                            style={{
+                              position: "absolute", inset: 0, display: "flex", alignItems: "center",
+                              justifyContent: "center", background: "rgba(0,0,0,0.2)", border: "none", cursor: "pointer",
+                            }}
+                          >
+                            <div style={{
+                              width: 48, height: 48, borderRadius: "50%",
+                              background: isPlaying ? "rgba(239,68,68,0.95)" : "rgba(239,68,68,0.9)",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                              boxShadow: "0 4px 20px rgba(239,68,68,0.4)",
+                            }}>
+                              {isPlaying ? <Pause size={20} fill="#fff" color="#fff" /> : <Play size={20} fill="#fff" color="#fff" style={{ marginLeft: 2 }} />}
+                            </div>
+                          </button>
+                          {/* Status badge */}
+                          <span style={{
+                            position: "absolute", top: 6, left: 6,
+                            padding: "2px 8px", borderRadius: 6, fontSize: "0.6rem", fontWeight: 700,
+                            background: isWatched ? "#10b981" : isPlaying ? "#ef4444" : "rgba(0,0,0,0.6)",
+                            color: "#fff",
+                          }}>
+                            {isWatched ? "✓ Done" : isPlaying ? "▶ Now" : `#${idx + 1}`}
+                          </span>
+                        </div>
+                        <div style={{ padding: "10px 14px" }}>
+                          <h4 style={{
+                            fontSize: "0.82rem", fontWeight: 700, color: "var(--text)", lineHeight: 1.3,
+                            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+                          }}>
+                            {link.title}
+                          </h4>
+                          {link.channelName && (
+                            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 3 }}>
+                              <Youtube size={10} style={{ display: "inline", marginRight: 3, color: "#ef4444" }} />
+                              {link.channelName}
+                            </p>
+                          )}
+                          <a
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              if (playlistIdx >= 0) {
+                                setPlaylistIdx(idx);
+                                setWatchedVideos(prev => { const s = new Set(prev); for (let i = idx; i < playlistIdx; i++) s.add(i); return s; });
+                              }
+                              onWatchVideo(videoId, link.title, link.channelName ?? "");
+                            }}
+                            className="watch-btn red"
+                            style={{ marginTop: 8 }}
+                          >
+                            <Play size={13} fill="#fff" /> {isPlaying ? "Now Playing" : "Watch"}
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Non-video links */}
+                  {nonVideoLinks.map((link) => (
+                    <a
+                      key={link.id}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "12px 14px", borderRadius: 12,
+                        background: "var(--surface2)", border: "1px solid var(--border)",
+                        textDecoration: "none",
+                      }}
+                    >
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 8, flexShrink: 0,
+                        background: "rgba(6,182,212,0.1)", display: "flex", alignItems: "center", justifyContent: "center",
+                      }}>
+                        {link.type === "blog" ? <Globe size={16} style={{ color: "var(--cyan)" }} /> : <ExternalLink size={16} style={{ color: "var(--brand)" }} />}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text)", lineHeight: 1.3 }}>{link.title}</p>
+                        <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{link.type === "blog" ? "Blog" : "Link"}</p>
+                      </div>
+                      <ExternalLink size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+                    </a>
+                  ))}
+                </div>
+              </>
             )}
 
             {hasLinks && (
@@ -390,6 +691,9 @@ export default function DayLinkView({
                 <button onClick={() => onAskAi(`Key points from Day ${day}: ${dayData?.title || ""}`)} className="simple-pill" style={{ fontSize: "0.75rem" }}>
                   📝 Key points
                 </button>
+                <button onClick={() => { setTab("quiz"); onLoadQuiz(); }} className="simple-pill" style={{ fontSize: "0.75rem" }}>
+                  <Target size={12} /> Take Quiz
+                </button>
               </div>
             )}
           </div>
@@ -397,13 +701,62 @@ export default function DayLinkView({
 
         {/* QUIZ TAB */}
         {tab === "quiz" && (
-          <QuizView
-            quiz={quiz} answers={answers} evalResult={evalResult}
-            onAnswer={onAnswer} onSubmit={onSubmitQuiz} onNextLesson={onNextLesson}
-            isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading}
-          />
+          <>
+            <QuizView
+              quiz={quiz} answers={answers} evalResult={evalResult}
+              onAnswer={onAnswer} onSubmit={onSubmitQuiz} onNextLesson={onNextLesson}
+              isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading}
+            />
+
+            {/* Continue in Telegram after pass */}
+            {evalResult?.passed && (
+              <div style={{
+                marginTop: 20, padding: "14px 16px", borderRadius: 12,
+                background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)",
+                textAlign: "center",
+              }}>
+                <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
+                  🎉 Day {day} completed!
+                </p>
+                <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+                  <a
+                    href={`https://t.me/csalearningbot?start=day${day + 1}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      padding: "8px 14px", borderRadius: 8,
+                      background: "#229ED9", color: "#fff",
+                      fontSize: "0.78rem", fontWeight: 600, textDecoration: "none",
+                    }}
+                  >
+                    💬 Telegram — Day {day + 1}
+                  </a>
+                  <button
+                    onClick={onNextLesson}
+                    style={{
+                      display: "inline-flex", alignItems: "center", gap: 6,
+                      padding: "8px 14px", borderRadius: 8,
+                      background: "linear-gradient(135deg, #059669, #10b981)", color: "#fff",
+                      fontSize: "0.78rem", fontWeight: 600, border: "none", cursor: "pointer",
+                    }}
+                  >
+                    <ArrowRight size={13} /> Next Day Here
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>
   );
 }
+
+// ─── Shared card style ────────────────────────────────────────────────────────
+const linkCardStyle: React.CSSProperties = {
+  borderRadius: 12,
+  overflow: "hidden",
+  background: "var(--surface)",
+  transition: "border-color 0.2s",
+};

@@ -422,8 +422,8 @@ EVALUATION RULES:
 - MCQ/FIB/TF: Check absolute correctness
 - Scenario/Viva: Evaluate logical reasoning, accuracy, completeness
 - Scoring: Each correct answer = 1 point. Total out of 12.
-- PASS THRESHOLD: 70% (9 or more correct out of 12 = pass)
-- 9 or fewer correct = fail
+- PASS THRESHOLD: 67% (8 or more correct out of 12 = pass)
+- 7 or fewer correct = fail
 - For EACH question, provide: isCorrect, correctAnswer, explanation
 - For WRONG answers, provide a detailed explanation in friendly Indian English + what they should have answered
 - weakTopicsAdded: list specific sub-topics they got wrong

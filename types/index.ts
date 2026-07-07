@@ -488,8 +488,8 @@ export const QUIZ_CONFIG = {
     intermediate: 3,
     tough: 3,
   },
-  /** Pass threshold: 70% (9 out of 12) */
-  passPercent: 70,
+  /** Pass threshold: 67% (8 out of 12) */
+  passPercent: 67,
   /** Weekly quiz: 50 questions from previous 7 days */
   weekly: {
     totalQuestions: 50,
