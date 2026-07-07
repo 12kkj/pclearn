@@ -307,6 +307,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .dashboard-grid { grid-template-columns: 1fr; }
 }
 
+/* ─── Player Responsive ─────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .playlist-sidebar { display: none !important; }
+  .player-layout { flex-direction: column !important; }
+  .player-main { width: 100% !important; }
+}
+@media (min-width: 769px) {
+  .playlist-sidebar { display: flex !important; }
+  .player-layout { flex-direction: row !important; }
+}
+
 @media (max-width: 768px) {
   .home-shell { padding: 12px 12px 92px; gap: 12px; }
   .dashboard-card-button { padding: 11px 10px; }

@@ -232,8 +232,6 @@ export default function DayLinkView({
   const [activeVideo, setActiveVideo] = useState<number>(-1);
   const [watchedVideos, setWatchedVideos] = useState<Set<number>>(new Set());
   const [bottomTab, setBottomTab] = useState<"transcript" | "ai" | "quiz" | "none">("none");
-  // Responsive handling: adjust layout for small screens
-  const [isMobile, setIsMobile] = useState<boolean>(false);
   const [currentTranscript, setCurrentTranscript] = useState("");
   const [loadingTranscript, setLoadingTranscript] = useState(false);
 
@@ -252,14 +250,6 @@ export default function DayLinkView({
       setActiveVideo(0);
     }
   }, [hasVideos, quizOnly]); // eslint-disable-line
-
-  // Detect mobile screen size for responsive layout
-  useEffect(() => {
-    const checkMobile = () => setIsMobile(window.innerWidth < 640);
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
 
   // Advance on external close
   useEffect(() => {
@@ -357,93 +347,91 @@ export default function DayLinkView({
       </div>
 
       {/* ── Main: Player + Sidebar ─────────────────────────────────────── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0, flexDirection: isMobile ? "column" : "row" }}>
+      <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0, flexDirection: "row" }} className="player-layout">
 
         {/* ── Left: Player + Below Panel ───────────────────────────────── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0 }}>
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0 }} className="player-main">
 
           {activeVideo >= 0 && currentVideo ? (
             <>
-              {/* ── Video Player (capped height) ── */}
-              <div style={{ flexShrink: 0, background: "#000", maxHeight: isMobile ? "30vh" : "45vh", width: "100%", position: "relative" }}>
-                <iframe
-                  src={`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&rel=0&modestbranding=1`}
-                  title={currentVideo.title}
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                  style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }}
-                />
+              {/* ── Video Player (responsive, capped) ── */}
+              <div style={{ flexShrink: 0, background: "#000", position: "relative", width: "100%" }}>
+                <div style={{ position: "relative", width: "100%", height: "auto", aspectRatio: "16/9", maxHeight: "min(40vh, 320px)" }}>
+                  <iframe
+                    src={`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&rel=0&modestbranding=1`}
+                    title={currentVideo.title}
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture"
+                    allowFullScreen
+                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }}
+                  />
+                </div>
               </div>
 
               {/* ── Below Video: Title + Actions + Toolbar ── */}
               <div style={{
-                padding: "8px 14px", background: "var(--surface)", borderBottom: "1px solid var(--border)",
+                padding: "10px 14px", background: "var(--surface)", borderBottom: "1px solid var(--border)",
                 flexShrink: 0,
               }}>
                 {/* Title + channel on one line */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <p style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--text)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                     {currentVideo.title}
                   </p>
                   {currentVideo.channelName && (
-                    <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", flexShrink: 0 }}>
+                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", flexShrink: 0 }}>
                       {currentVideo.channelName}
                     </span>
                   )}
                 </div>
 
                 {/* One row: Prev + Next + Full Screen + toolbar buttons */}
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                   {activeVideo > 0 && (
                     <button onClick={prevVideo} style={{
-                      padding: "8px 14px", borderRadius: 6, border: "1px solid var(--border)",
+                      padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)",
                       background: "var(--surface2)", color: "var(--text)", fontSize: "0.85rem", fontWeight: 600,
                       cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
                     }}>
-                      <SkipBack size={12} /> Prev
+                      <SkipBack size={14} /> Prev
                     </button>
                   )}
                   {activeVideo < videoLinks.length - 1 && (
                     <button onClick={skipVideo} style={{
-                      padding: "8px 14px", borderRadius: 6,
+                      padding: "8px 14px", borderRadius: 8,
                       background: "linear-gradient(135deg, #ef4444, #dc2626)",
                       color: "#fff", fontSize: "0.85rem", fontWeight: 600, border: "none",
                       cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
                     }}>
-                      <SkipForward size={12} /> Next
+                      <SkipForward size={14} /> Next
                     </button>
                   )}
-                    <a href={`https://pclearn.vercel.app/?day=${day}`} target="_blank" rel="noopener noreferrer"
-                      style={{
-                        padding: "8px 14px", borderRadius: 6, border: "1px solid var(--border)",
-                        background: "var(--surface2)", color: "var(--text-muted)", fontSize: "0.85rem", fontWeight: 600,
-                        textDecoration: "none", display: "flex", alignItems: "center", gap: 4,
-                      }}>
-                    <Globe size={12} /> Full Screen
+                  <a href={`https://pclearn.vercel.app/?day=${day}`} target="_blank" rel="noopener noreferrer"
+                    style={{
+                      padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)",
+                      background: "var(--surface2)", color: "var(--text-muted)", fontSize: "0.85rem", fontWeight: 600,
+                      textDecoration: "none", display: "flex", alignItems: "center", gap: 4,
+                    }}>
+                    <Globe size={14} /> Full Screen
                   </a>
-                  <div style={{ width: 1, height: 18, background: "var(--border)", flexShrink: 0 }} />
+                  <div style={{ width: 1, height: 20, background: "var(--border)", flexShrink: 0 }} />
                   {/* Toolbar toggles */}
-                  {[{ id: "transcript" as const, label: "📄 Transcript", activeColor: "rgba(6,182,212,0.15)", activeBorder: "#06b6d4" },
+                  {[
+                    { id: "transcript" as const, label: "📄 Transcript", activeColor: "rgba(6,182,212,0.15)", activeBorder: "#06b6d4" },
                     { id: "ai" as const, label: "🤖 Ask AI", activeColor: "rgba(99,102,241,0.15)", activeBorder: "var(--brand)" },
                     { id: "quiz" as const, label: "🧪 Quiz", activeColor: "rgba(139,92,246,0.15)", activeBorder: "#8b5cf6" },
                   ].map(t => (
-                      <button key={t.id} onClick={() => {
-                        const next = bottomTab === t.id ? "none" : t.id;
-                        setBottomTab(next);
-                        if (next === "quiz" && !quiz && !quizLoading) onLoadQuiz();
-                      }} style={{
-                        padding: "8px 14px",
-                        borderRadius: 6,
-                        border: `1.5px solid ${bottomTab === t.id ? t.activeBorder : "var(--border)"}`,
-                        background: bottomTab === t.id ? t.activeColor : "var(--surface2)",
-                        color: bottomTab === t.id ? t.activeBorder : "var(--text2)",
-                        fontSize: "0.85rem",
-                        fontWeight: 600,
-                        cursor: "pointer",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                      }}>
+                    <button key={t.id} onClick={() => {
+                      const next = bottomTab === t.id ? "none" : t.id;
+                      setBottomTab(next);
+                      if (next === "quiz" && !quiz && !quizLoading) onLoadQuiz();
+                    }} style={{
+                      padding: "8px 14px", borderRadius: 8,
+                      border: `1.5px solid ${bottomTab === t.id ? t.activeBorder : "var(--border)"}`,
+                      background: bottomTab === t.id ? t.activeColor : "var(--surface2)",
+                      color: bottomTab === t.id ? t.activeBorder : "var(--text2)",
+                      fontSize: "0.85rem", fontWeight: 600, cursor: "pointer",
+                      display: "flex", alignItems: "center", gap: 4,
+                    }}>
                       {t.label}
                     </button>
                   ))}
@@ -564,8 +552,8 @@ export default function DayLinkView({
 
         {/* ── Right: Playlist Sidebar ── */}
         {hasVideos && (
-          <div style={{
-            width: isMobile ? "100%" : 280, flexShrink: 0, borderLeft: isMobile ? "none" : "1px solid var(--border)",
+          <div className="playlist-sidebar" style={{
+            width: 240, flexShrink: 0, borderLeft: "1px solid var(--border)",
             background: "var(--surface)", display: "flex", flexDirection: "column", overflow: "hidden",
           }}>
             {/* Header */}
