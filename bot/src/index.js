@@ -275,6 +275,7 @@ function createBot(env) {
   // ════════════════════════════════════════════════════════════════════════
 
   bot.command("start", async (ctx) => {
+    try {
     const userId = String(ctx.from.id);
     const sa = getSA(env);
     const projectId = env.FIREBASE_PROJECT_ID;
@@ -317,6 +318,10 @@ function createBot(env) {
       `💡 _Tip: Just type naturally! Try "day 5", "quiz me", or ask me anything!_`,
       { parse_mode: "Markdown", reply_markup: kb }
     );
+    } catch (err) {
+      console.error("[start] Error:", err.message);
+      await ctx.reply("❌ Something went wrong. Type /start to try again.").catch(() => {});
+    }
   });
 
   // ══════════════════════════════════════════════════════════════════════
@@ -408,6 +413,7 @@ function createBot(env) {
   // ══════════════════════════════════════════════════════════════════════
 
   async function handleIntent(ctx, env, intent, userId) {
+    try {
     const sa = getSA(env);
     const projectId = env.FIREBASE_PROJECT_ID;
 
@@ -511,6 +517,10 @@ function createBot(env) {
         await showAdminPanel(ctx, env);
         break;
       }
+    }
+    } catch (err) {
+      console.error("[intent] Error:", intent.action, err.message);
+      await ctx.reply("❌ Something went wrong. Try again!").catch(() => {});
     }
   }
 
@@ -1322,17 +1332,27 @@ function buildContextKeyboard() {
 export default {
   async fetch(request, env, ctx) {
     if (request.method !== "POST") {
-      return new Response("CSA Telegram Bot v2 is running! 🎓", { status: 200 });
+      return new Response("CSA Telegram Bot v3 is running! 🎓", { status: 200 });
     }
 
     try {
       const bot = createBot(env);
+
+      // Initialize bot (required by grammY — fetches bot info from Telegram)
+      await bot.init();
+
+      // Capture grammY handler errors (they're swallowed by default)
+      bot.catch((err) => {
+        console.error("[grammy] Handler error:", err.message, err.stack);
+      });
+
       const update = await request.json();
       await bot.handleUpdate(update);
       return new Response("ok", { status: 200 });
     } catch (err) {
-      console.error("Bot error:", err);
-      return new Response("ok", { status: 200 });
+      console.error("[worker] Fatal error:", err.message, err.stack);
+      // Return 500 so Telegram retries the update
+      return new Response("error", { status: 500 });
     }
   },
 };
