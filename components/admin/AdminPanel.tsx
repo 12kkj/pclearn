@@ -906,7 +906,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
                               {has ? <span style={{ fontSize: "0.55rem", padding: "1px 5px", borderRadius: 999, background: `${sc}18`, color: sc, fontWeight: 600 }}>{PIPELINE_STAGES.find(s => s.key === content.pipelineStatus)?.icon}</span> : <Plus size={10} style={{ color: "var(--text-muted)" }} />}
                             </div>
                             <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{content?.title ?? getLessonByDay(day)?.title ?? "Click to add"}</p>
-                            {has && content.resources.length > 0 && <p style={{ fontSize: "0.62rem", color: "var(--cyan)", marginTop: 2 }}>📎 {content.resources.length} links</p>}
+                            {has && (content.resources?.length ?? 0) > 0 && <p style={{ fontSize: "0.62rem", color: "var(--cyan)", marginTop: 2 }}>📎 {content.resources?.length ?? 0} links</p>}
                           </button>
                         );
                       })}
