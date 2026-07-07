@@ -2,10 +2,9 @@
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
-  Play, ExternalLink, Youtube, Globe, Sparkles,
-  CheckCircle2, Target, ArrowRight, Loader2, RotateCcw,
-  AlertCircle, HelpCircle, ChevronRight, List, SkipForward,
-  Pause, MessageSquare, ExternalLinkIcon,
+  Play, Pause, SkipForward, SkipBack, ExternalLink, Globe,
+  Sparkles, CheckCircle2, Target, ArrowRight, Loader2, RotateCcw,
+  MessageSquare, List, Volume2, X,
 } from "lucide-react";
 import type { AdminDayContent, AdminResourceLink } from "@/types";
 import type { LearnerState, QuizQuestion } from "@/types";
@@ -39,91 +38,79 @@ interface Props {
   onStartDay: (day: number) => void;
   onAskAi: (prompt: string) => void;
   onWatchVideo: (videoId: string, title: string, channel: string) => void;
-  /** Called when video player closes — for playlist auto-advance */
   onVideoClose?: () => void;
-  /** Trigger counter — increments each time video player closes */
   videoCloseTrigger?: number;
-  /** Quiz-only mode: show only quiz, no video list */
   quizOnly?: boolean;
 }
 
-// ─── Minimal Link Card ────────────────────────────────────────────────────────
-function LinkCard({ link, onWatch }: { link: AdminResourceLink; onWatch: () => void }) {
-  const isVideo = link.type === "youtube";
-  const videoId = isVideo
-    ? (() => { try { return new URL(link.url).searchParams.get("v") ?? ""; } catch { return ""; } })()
-    : "";
-  const thumb = link.thumbnailUrl || (videoId ? `https://img.youtube.com/vi/${videoId}/hqdefault.jpg` : null);
-
-  return (
-    <div className="link-card">
-      {isVideo && thumb && (
-        <div style={{ position: "relative", aspectRatio: "16/9", overflow: "hidden" }}>
-          <img
-            src={thumb}
-            alt={link.title}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            onError={(e) => { (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`; }}
-          />
-          <button
-            onClick={onWatch}
-            style={{
-              position: "absolute", inset: 0, display: "flex", alignItems: "center",
-              justifyContent: "center", background: "rgba(0,0,0,0.2)", border: "none", cursor: "pointer",
-            }}
-          >
-            <div style={{
-              width: 48, height: 48, borderRadius: "50%", background: "rgba(239,68,68,0.9)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              boxShadow: "0 4px 20px rgba(239,68,68,0.4)",
-            }}>
-              <Play size={20} fill="#fff" color="#fff" style={{ marginLeft: 2 }} />
-            </div>
-          </button>
-        </div>
-      )}
-      <div style={{ padding: "12px 14px" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-          {!isVideo && (
-            <div style={{
-              width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-              background: "rgba(6,182,212,0.1)", display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              {link.type === "blog" ? <Globe size={14} style={{ color: "var(--cyan)" }} /> : <ExternalLink size={14} style={{ color: "var(--brand)" }} />}
-            </div>
-          )}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h4 style={{
-              fontSize: "0.85rem", fontWeight: 700, color: "var(--text)", lineHeight: 1.3,
-              display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
-            }}>
-              {link.title}
-            </h4>
-            {link.channelName && (
-              <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", marginTop: 2 }}>
-                <Youtube size={10} style={{ display: "inline", marginRight: 3, color: "#ef4444" }} />
-                {link.channelName}
-              </p>
-            )}
-          </div>
-        </div>
-        <a
-          href={link.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => {
-            if (isVideo && videoId) { e.preventDefault(); onWatch(); }
-          }}
-          className={`watch-btn ${isVideo ? "red" : "purple"}`}
-        >
-          <Play size={15} fill="#fff" /> Watch Here
-        </a>
-      </div>
-    </div>
-  );
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function getVideoId(url: string): string {
+  try { return new URL(url).searchParams.get("v") ?? ""; } catch { return ""; }
 }
 
-// ─── Minimal Quiz ─────────────────────────────────────────────────────────────
+function getThumbnail(url: string): string {
+  const id = getVideoId(url);
+  return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : "";
+}
+
+// ─── Transcript Cache (localStorage) ──────────────────────────────────────────
+const TRANSCRIPT_KEY = "csa_transcripts";
+
+function getTranscriptCache(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try { return JSON.parse(localStorage.getItem(TRANSCRIPT_KEY) || "{}"); } catch { return {}; }
+}
+
+function saveTranscriptCache(cache: Record<string, string>) {
+  try { localStorage.setItem(TRANSCRIPT_KEY, JSON.stringify(cache)); } catch {}
+}
+
+function getCachedTranscript(videoId: string): string | null {
+  return getTranscriptCache()[videoId] || null;
+}
+
+async function fetchTranscript(videoId: string): Promise<string> {
+  // Check cache first
+  const cached = getCachedTranscript(videoId);
+  if (cached) return cached;
+
+  try {
+    // Use YouTube's timed text API
+    const res = await fetch(`https://www.youtube.com/api/timedtext?lang=en&v=${videoId}&fmt=json3`);
+    if (!res.ok) {
+      // Try auto-generated captions
+      const res2 = await fetch(`https://www.youtube.com/api/timedtext?lang=en&v=${videoId}&kind=asr&fmt=json3`);
+      if (!res2.ok) return "";
+      const data = await res2.json();
+      const text = (data.events || [])
+        .filter((e: any) => e.segs)
+        .map((e: any) => e.segs.map((s: any) => s.utf8).join(""))
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+      // Cache it
+      const cache = getTranscriptCache();
+      cache[videoId] = text;
+      saveTranscriptCache(cache);
+      return text;
+    }
+    const data = await res.json();
+    const text = (data.events || [])
+      .filter((e: any) => e.segs)
+      .map((e: any) => e.segs.map((s: any) => s.utf8).join(""))
+      .join(" ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const cache = getTranscriptCache();
+    cache[videoId] = text;
+    saveTranscriptCache(cache);
+    return text;
+  } catch {
+    return "";
+  }
+}
+
+// ─── Quiz View ────────────────────────────────────────────────────────────────
 function QuizView({
   quiz, answers, evalResult, onAnswer, onSubmit, onNextLesson,
   isSubmitting, day, onLoadQuiz, quizLoading,
@@ -135,21 +122,21 @@ function QuizView({
 }) {
   if (quizLoading) {
     return (
-      <div className="empty-state">
-        <Loader2 size={32} className="spinner" style={{ color: "var(--brand)", margin: "0 auto 12px" }} />
-        <p style={{ fontSize: "0.88rem" }}>Generating quiz…</p>
+      <div style={{ textAlign: "center", padding: "40px 20px" }}>
+        <Loader2 size={28} className="spinner" style={{ color: "var(--brand)", margin: "0 auto 10px" }} />
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Loading quiz…</p>
       </div>
     );
   }
 
   if (!quiz) {
     return (
-      <div className="empty-state">
-        <Target size={32} style={{ color: "var(--brand)", margin: "0 auto 12px", opacity: 0.5 }} />
-        <p style={{ fontSize: "0.92rem", fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Ready for the quiz?</p>
-        <p style={{ fontSize: "0.82rem", marginBottom: 16 }}>Need 67% to unlock Day {day + 1}</p>
+      <div style={{ textAlign: "center", padding: "40px 20px" }}>
+        <Target size={28} style={{ color: "var(--brand)", margin: "0 auto 10px", opacity: 0.5 }} />
+        <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>Ready for the quiz?</p>
+        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 14 }}>Need 67% to unlock Day {day + 1}</p>
         <button onClick={onLoadQuiz} className="watch-btn purple" style={{ maxWidth: 200, margin: "0 auto" }}>
-          <Target size={15} /> Start Quiz
+          <Target size={14} /> Start Quiz
         </button>
       </div>
     );
@@ -158,7 +145,7 @@ function QuizView({
   const allAnswered = quiz.questions.every(q => answers[q.id]?.trim());
 
   return (
-    <div style={{ padding: 0 }}>
+    <div>
       {evalResult && (
         <div style={{
           padding: "12px 16px", borderRadius: 10, marginBottom: 16, textAlign: "center",
@@ -289,7 +276,10 @@ function QuizView({
   );
 }
 
-// ─── Main DayLinkView ─────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+// MAIN DAY LINK VIEW — Clean Playlist Player
+// ══════════════════════════════════════════════════════════════════════════════
+
 export default function DayLinkView({
   day, dayData, learner,
   quiz, quizLoading, answers, evalResult, isSubmitting,
@@ -298,39 +288,35 @@ export default function DayLinkView({
   videoCloseTrigger = 0,
   quizOnly = false,
 }: Props) {
-  const [tab, setTab] = useState<"watch" | "quiz">(quizOnly ? "quiz" : "watch");
-  const [playlistIdx, setPlaylistIdx] = useState(-1); // -1 = not playing
+  const [tab, setTab] = useState<"watch" | "quiz" | "ai">(quizOnly ? "quiz" : "watch");
+  const [playlistIdx, setPlaylistIdx] = useState(-1);
   const [watchedVideos, setWatchedVideos] = useState<Set<number>>(new Set());
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [currentTranscript, setCurrentTranscript] = useState("");
+  const [loadingTranscript, setLoadingTranscript] = useState(false);
 
   const links = dayData?.resources ?? [];
   const videoLinks = links.filter(l => l.type === "youtube");
-  const nonVideoLinks = links.filter(l => l.type !== "youtube");
-  const hasLinks = links.length > 0;
   const hasVideos = videoLinks.length > 0;
 
   // Auto-load quiz in quiz-only mode
   useEffect(() => {
-    if (quizOnly && !quiz && !quizLoading) {
-      onLoadQuiz();
-    }
+    if (quizOnly && !quiz && !quizLoading) onLoadQuiz();
   }, [quizOnly]);
 
   // Auto-advance playlist when video player closes
   useEffect(() => {
-    if (videoCloseTrigger === 0) return; // skip initial
+    if (videoCloseTrigger === 0) return;
     if (playlistIdx >= 0 && playlistIdx < videoLinks.length - 1) {
-      // More videos to play — auto-advance after short delay
       const timer = setTimeout(() => {
         const nextIdx = playlistIdx + 1;
         setWatchedVideos(prev => new Set([...prev, playlistIdx]));
         setPlaylistIdx(nextIdx);
         const link = videoLinks[nextIdx];
-        const videoId = (() => { try { return new URL(link.url).searchParams.get("v") ?? ""; } catch { return ""; } })();
-        onWatchVideo(videoId, link.title, link.channelName ?? "");
-      }, 800);
+        onWatchVideo(getVideoId(link.url), link.title, link.channelName ?? "");
+      }, 600);
       return () => clearTimeout(timer);
     } else if (playlistIdx >= 0) {
-      // Last video done — switch to quiz
       setWatchedVideos(prev => new Set([...prev, playlistIdx]));
       setPlaylistIdx(-1);
       setTab("quiz");
@@ -338,17 +324,37 @@ export default function DayLinkView({
     }
   }, [videoCloseTrigger]);
 
-  // Playlist: play next video
-  const playNext = useCallback(() => {
+  // Load transcript for current playing video
+  useEffect(() => {
+    if (playlistIdx >= 0 && videoLinks[playlistIdx]) {
+      const vid = getVideoId(videoLinks[playlistIdx].url);
+      if (vid) {
+        setLoadingTranscript(true);
+        fetchTranscript(vid).then(t => {
+          setCurrentTranscript(t);
+          setLoadingTranscript(false);
+        });
+      }
+    }
+  }, [playlistIdx]);
+
+  // Start playlist
+  const startPlaylist = useCallback(() => {
+    setPlaylistIdx(0);
+    setWatchedVideos(new Set());
+    const link = videoLinks[0];
+    if (link) onWatchVideo(getVideoId(link.url), link.title, link.channelName ?? "");
+  }, [videoLinks, onWatchVideo]);
+
+  // Skip / Next
+  const skipVideo = useCallback(() => {
     if (playlistIdx < videoLinks.length - 1) {
       const nextIdx = playlistIdx + 1;
       setWatchedVideos(prev => new Set([...prev, playlistIdx]));
       setPlaylistIdx(nextIdx);
       const link = videoLinks[nextIdx];
-      const videoId = (() => { try { return new URL(link.url).searchParams.get("v") ?? ""; } catch { return ""; } })();
-      onWatchVideo(videoId, link.title, link.channelName ?? "");
+      onWatchVideo(getVideoId(link.url), link.title, link.channelName ?? "");
     } else {
-      // All videos watched — switch to quiz
       setWatchedVideos(prev => new Set([...prev, playlistIdx]));
       setPlaylistIdx(-1);
       setTab("quiz");
@@ -356,80 +362,45 @@ export default function DayLinkView({
     }
   }, [playlistIdx, videoLinks, onWatchVideo, onLoadQuiz]);
 
-  // Skip current video in playlist
-  const skipVideo = useCallback(() => {
-    playNext();
-  }, [playNext]);
-
-  // Start playlist from beginning
-  const startPlaylist = useCallback(() => {
-    setPlaylistIdx(0);
-    setWatchedVideos(new Set());
-    const link = videoLinks[0];
-    if (link) {
-      const videoId = (() => { try { return new URL(link.url).searchParams.get("v") ?? ""; } catch { return ""; } })();
-      onWatchVideo(videoId, link.title, link.channelName ?? "");
-    }
+  // Play specific video
+  const playVideo = useCallback((idx: number) => {
+    setPlaylistIdx(idx);
+    const link = videoLinks[idx];
+    if (link) onWatchVideo(getVideoId(link.url), link.title, link.channelName ?? "");
   }, [videoLinks, onWatchVideo]);
 
+  // Empty state
   if (!day) {
     return (
-      <div className="empty-state" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%" }}>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" }}>
         <div style={{ fontSize: "3rem", marginBottom: 12 }}>📚</div>
         <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Select a day to begin</h3>
-        <p style={{ fontSize: "0.82rem", maxWidth: 320, lineHeight: 1.5 }}>
-          Pick a day from the sidebar. Each day has videos and resources curated by your teacher.
+        <p style={{ fontSize: "0.82rem", maxWidth: 300, textAlign: "center", lineHeight: 1.5 }}>
+          Pick a day from the sidebar to start learning.
         </p>
       </div>
     );
   }
 
-  // Quiz-only mode
+  // ─── Quiz-only mode ───────────────────────────────────────────────────────
   if (quizOnly) {
     return (
       <div style={{ height: "100%", overflowY: "auto" }}>
-        <div style={{ maxWidth: 600, margin: "0 auto", padding: "16px" }}>
-          {/* Compact header */}
+        <div style={{ maxWidth: 560, margin: "0 auto", padding: "16px" }}>
           <div style={{
             background: "linear-gradient(135deg, #8b5cf6, #6366f1)",
             borderRadius: 14, padding: "16px 20px", marginBottom: 16, color: "#fff",
           }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <Target size={20} />
-              <div>
-                <h2 style={{ fontSize: "0.95rem", fontWeight: 800 }}>Day {day} Quiz</h2>
-                <p style={{ fontSize: "0.72rem", opacity: 0.8 }}>{dayData?.title || ""} • Need 67% to pass</p>
-              </div>
-            </div>
+            <h2 style={{ fontSize: "0.95rem", fontWeight: 800 }}>Day {day} Quiz</h2>
+            <p style={{ fontSize: "0.72rem", opacity: 0.8 }}>{dayData?.title || ""} • Need 67% to pass</p>
           </div>
-
-          <QuizView
-            quiz={quiz} answers={answers} evalResult={evalResult}
+          <QuizView quiz={quiz} answers={answers} evalResult={evalResult}
             onAnswer={onAnswer} onSubmit={onSubmitQuiz} onNextLesson={onNextLesson}
-            isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading}
-          />
-
-          {/* Continue in Telegram */}
+            isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading} />
           {evalResult?.passed && (
-            <div style={{
-              marginTop: 20, padding: "14px 16px", borderRadius: 12,
-              background: "rgba(99,102,241,0.08)", border: "1px solid rgba(99,102,241,0.2)",
-              textAlign: "center",
-            }}>
-              <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
-                🎉 Great job! Day {day} completed!
-              </p>
-              <a
-                href={`https://t.me/csalearningbot?start=day${day + 1}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                style={{
-                  display: "inline-flex", alignItems: "center", gap: 6,
-                  padding: "8px 16px", borderRadius: 8,
-                  background: "#229ED9", color: "#fff",
-                  fontSize: "0.82rem", fontWeight: 600, textDecoration: "none",
-                }}
-              >
+            <div style={{ marginTop: 20, textAlign: "center" }}>
+              <a href={`https://t.me/csalearningbot?start=day${day + 1}`} target="_blank" rel="noopener noreferrer"
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 8, background: "#229ED9", color: "#fff", fontSize: "0.82rem", fontWeight: 600, textDecoration: "none" }}>
                 💬 Continue in Telegram — Day {day + 1}
               </a>
             </div>
@@ -439,276 +410,231 @@ export default function DayLinkView({
     );
   }
 
+  // ─── Main view ────────────────────────────────────────────────────────────
   return (
     <div style={{ height: "100%", overflowY: "auto" }}>
       <div style={{ maxWidth: 600, margin: "0 auto", padding: "16px" }}>
-        {/* Day header */}
+
+        {/* ── Day Header ──────────────────────────────────────────────────── */}
         <div style={{
           background: "linear-gradient(135deg, var(--brand), var(--brand2))",
-          borderRadius: 14, padding: "18px 20px", marginBottom: 16, color: "#fff",
+          borderRadius: 14, padding: "16px 18px", marginBottom: 14, color: "#fff",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{
-              width: 40, height: 40, borderRadius: 10, background: "rgba(255,255,255,0.2)",
+              width: 36, height: 36, borderRadius: 10, background: "rgba(255,255,255,0.2)",
               display: "flex", alignItems: "center", justifyContent: "center",
-              fontSize: "1.1rem", fontWeight: 800, flexShrink: 0,
+              fontSize: "1rem", fontWeight: 800, flexShrink: 0,
             }}>
               {day}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <h2 style={{ fontSize: "1rem", fontWeight: 800, lineHeight: 1.3 }}>
+              <h2 style={{ fontSize: "0.95rem", fontWeight: 800, lineHeight: 1.3 }}>
                 {dayData?.title || `Day ${day}`}
               </h2>
-              <p style={{ fontSize: "0.72rem", opacity: 0.8, marginTop: 2 }}>
-                {dayData?.description || "Watch the videos and take the quiz"}
-              </p>
+              {dayData?.description && (
+                <p style={{ fontSize: "0.7rem", opacity: 0.8, marginTop: 2 }}>
+                  {dayData.description}
+                </p>
+              )}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-            {dayData?.difficulty && (
-              <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: "0.65rem", fontWeight: 600, background: "rgba(255,255,255,0.15)" }}>
-                {dayData.difficulty}
-              </span>
-            )}
-            {dayData?.estimatedMinutes && (
-              <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: "0.65rem", fontWeight: 600, background: "rgba(255,255,255,0.15)" }}>
-                ⏱ {dayData.estimatedMinutes} min
-              </span>
-            )}
-            <span style={{ padding: "2px 8px", borderRadius: 6, fontSize: "0.65rem", fontWeight: 600, background: "rgba(255,255,255,0.15)" }}>
-              {links.length} resource{links.length !== 1 ? "s" : ""}
-            </span>
-          </div>
         </div>
 
-        {/* Tab pills */}
-        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-          <button onClick={() => setTab("watch")} className={`simple-pill ${tab === "watch" ? "active" : ""}`}>
-            <Play size={14} /> Watch & Learn
-          </button>
-          <button onClick={() => { setTab("quiz"); if (!quiz && !quizLoading) onLoadQuiz(); }} className={`simple-pill ${tab === "quiz" ? "active" : ""}`}>
-            <Target size={14} /> Quiz
-          </button>
+        {/* ── Tab Bar ─────────────────────────────────────────────────────── */}
+        <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+          {[
+            { id: "watch" as const, label: "Watch", icon: <Play size={13} /> },
+            { id: "quiz" as const, label: "Quiz", icon: <Target size={13} /> },
+            { id: "ai" as const, label: "Ask AI", icon: <Sparkles size={13} /> },
+          ].map(t => (
+            <button
+              key={t.id}
+              onClick={() => {
+                setTab(t.id);
+                if (t.id === "quiz" && !quiz && !quizLoading) onLoadQuiz();
+              }}
+              className={`simple-pill ${tab === t.id ? "active" : ""}`}
+              style={{ fontSize: "0.78rem", padding: "6px 14px" }}
+            >
+              {t.icon} {t.label}
+            </button>
+          ))}
         </div>
 
-        {/* WATCH TAB — with playlist */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* WATCH TAB — Playlist Player                                       */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
         {tab === "watch" && (
           <div>
-            {!hasLinks ? (
-              <div className="empty-state">
+            {!hasVideos ? (
+              <div style={{ textAlign: "center", padding: "40px 20px", color: "var(--text-muted)" }}>
                 <div style={{ fontSize: "2.5rem", marginBottom: 8 }}>🔗</div>
-                <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>No links yet</p>
+                <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>No videos yet</p>
                 <p style={{ fontSize: "0.78rem" }}>Ask your teacher to add resources for Day {day}</p>
               </div>
             ) : (
               <>
-                {/* Playlist Controls */}
-                {hasVideos && (
+                {/* Now Playing Banner */}
+                {playlistIdx >= 0 && videoLinks[playlistIdx] && (
                   <div style={{
-                    display: "flex", alignItems: "center", gap: 8, marginBottom: 14,
-                    padding: "10px 14px", borderRadius: 12,
-                    background: "var(--surface2)", border: "1px solid var(--border)",
+                    padding: "12px 14px", borderRadius: 12, marginBottom: 12,
+                    background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)",
                   }}>
-                    <List size={16} style={{ color: "var(--brand)", flexShrink: 0 }} />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text)" }}>
-                        {playlistIdx >= 0
-                          ? `Playing ${playlistIdx + 1}/${videoLinks.length}`
-                          : `${videoLinks.length} video${videoLinks.length !== 1 ? "s" : ""} — play all in sequence`
-                        }
-                      </p>
-                      <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>
-                        {playlistIdx >= 0 ? "Next video plays automatically after current" : "Videos play one after another, then quiz"}
-                      </p>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                      <div style={{
+                        width: 8, height: 8, borderRadius: "50%", background: "#ef4444",
+                        animation: "pulse 1.5s infinite",
+                      }} />
+                      <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "var(--text)" }}>
+                        Now Playing: {playlistIdx + 1}/{videoLinks.length}
+                      </span>
+                      <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", flex: 1, textAlign: "right" }}>
+                        {videoLinks[playlistIdx].title}
+                      </span>
                     </div>
-                    {playlistIdx >= 0 ? (
-                      <div style={{ display: "flex", gap: 4 }}>
-                        <button onClick={skipVideo} style={{
-                          padding: "6px 10px", borderRadius: 8, border: "1px solid var(--border)",
-                          background: "var(--surface)", color: "var(--text)", fontSize: "0.72rem",
-                          fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
+                    {/* Progress bar */}
+                    <div style={{ display: "flex", gap: 3 }}>
+                      {videoLinks.map((_, i) => (
+                        <div key={i} style={{
+                          flex: 1, height: 3, borderRadius: 2,
+                          background: i < playlistIdx || watchedVideos.has(i)
+                            ? "#10b981" : i === playlistIdx ? "#ef4444" : "var(--border)",
+                          transition: "background 0.3s",
+                        }} />
+                      ))}
+                    </div>
+                    {/* Controls */}
+                    <div style={{ display: "flex", gap: 6, marginTop: 10, justifyContent: "center" }}>
+                      <button onClick={() => playlistIdx > 0 && playVideo(playlistIdx - 1)}
+                        disabled={playlistIdx <= 0}
+                        style={{
+                          padding: "6px 12px", borderRadius: 8, border: "1px solid var(--border)",
+                          background: "var(--surface)", color: playlistIdx <= 0 ? "var(--text-faint)" : "var(--text)",
+                          fontSize: "0.72rem", fontWeight: 600, cursor: playlistIdx <= 0 ? "default" : "pointer",
+                          display: "flex", alignItems: "center", gap: 4, opacity: playlistIdx <= 0 ? 0.4 : 1,
                         }}>
-                          <SkipForward size={12} /> Skip
-                        </button>
-                      </div>
-                    ) : (
-                      <button onClick={startPlaylist} style={{
+                        <SkipBack size={12} /> Prev
+                      </button>
+                      <button onClick={skipVideo} style={{
                         padding: "6px 12px", borderRadius: 8,
                         background: "linear-gradient(135deg, #ef4444, #dc2626)",
                         color: "#fff", fontSize: "0.72rem", fontWeight: 600,
                         cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
-                        flexShrink: 0,
                       }}>
-                        <Play size={12} fill="#fff" /> Play All
+                        {playlistIdx < videoLinks.length - 1 ? <><SkipForward size={12} /> Next</> : <><Target size={12} /> Quiz</>}
                       </button>
-                    )}
+                    </div>
                   </div>
                 )}
 
-                {/* Progress dots for playlist */}
-                {playlistIdx >= 0 && hasVideos && (
-                  <div style={{ display: "flex", gap: 4, marginBottom: 12, flexWrap: "wrap" }}>
-                    {videoLinks.map((_, i) => (
-                      <div key={i} style={{
-                        width: 8, height: 8, borderRadius: "50%",
-                        background: i < playlistIdx || watchedVideos.has(i)
-                          ? "#10b981" : i === playlistIdx ? "#ef4444" : "var(--border)",
-                        transition: "background 0.2s",
-                      }} />
-                    ))}
-                  </div>
+                {/* Play All Button */}
+                {playlistIdx < 0 && (
+                  <button onClick={startPlaylist} style={{
+                    width: "100%", padding: "12px", borderRadius: 12, marginBottom: 12,
+                    background: "linear-gradient(135deg, #ef4444, #dc2626)",
+                    color: "#fff", fontSize: "0.85rem", fontWeight: 700,
+                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+                    boxShadow: "0 4px 14px rgba(239,68,68,0.3)",
+                    border: "none",
+                  }}>
+                    <Play size={16} fill="#fff" /> Play All ({videoLinks.length} videos)
+                  </button>
                 )}
 
-                {/* Video cards */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* Video List */}
+                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                   {videoLinks.map((link, idx) => {
-                    const videoId = (() => { try { return new URL(link.url).searchParams.get("v") ?? ""; } catch { return ""; } })();
+                    const vid = getVideoId(link.url);
+                    const thumb = getThumbnail(link.url);
                     const isPlaying = playlistIdx === idx;
                     const isWatched = watchedVideos.has(idx);
 
                     return (
-                      <div key={link.id} style={{
-                        ...linkCardStyle,
-                        border: isPlaying
-                          ? "2px solid #ef4444"
-                          : isWatched
-                          ? "2px solid #10b981"
-                          : "1px solid var(--border)",
-                        opacity: isWatched && !isPlaying ? 0.6 : 1,
+                      <div key={link.id} onClick={() => playVideo(idx)} style={{
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "8px 10px", borderRadius: 10,
+                        background: isPlaying ? "rgba(239,68,68,0.08)" : "var(--surface2)",
+                        border: `1px solid ${isPlaying ? "rgba(239,68,68,0.3)" : isWatched ? "rgba(16,185,129,0.3)" : "var(--border)"}`,
+                        cursor: "pointer", transition: "all 0.15s",
                       }}>
-                        {/* Video thumbnail */}
-                        <div style={{ position: "relative", aspectRatio: "16/9", overflow: "hidden" }}>
-                          <img
-                            src={link.thumbnailUrl || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`}
-                            alt={link.title}
-                            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-                            onError={(e) => { (e.target as HTMLImageElement).src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`; }}
-                          />
-                          <button
-                            onClick={() => {
-                              if (playlistIdx >= 0) {
-                                // In playlist mode — jump to this video
-                                setPlaylistIdx(idx);
-                                setWatchedVideos(prev => { const s = new Set(prev); for (let i = idx; i < playlistIdx; i++) s.add(i); return s; });
-                              }
-                              onWatchVideo(videoId, link.title, link.channelName ?? "");
-                            }}
-                            style={{
-                              position: "absolute", inset: 0, display: "flex", alignItems: "center",
-                              justifyContent: "center", background: "rgba(0,0,0,0.2)", border: "none", cursor: "pointer",
-                            }}
-                          >
-                            <div style={{
-                              width: 48, height: 48, borderRadius: "50%",
-                              background: isPlaying ? "rgba(239,68,68,0.95)" : "rgba(239,68,68,0.9)",
-                              display: "flex", alignItems: "center", justifyContent: "center",
-                              boxShadow: "0 4px 20px rgba(239,68,68,0.4)",
-                            }}>
-                              {isPlaying ? <Pause size={20} fill="#fff" color="#fff" /> : <Play size={20} fill="#fff" color="#fff" style={{ marginLeft: 2 }} />}
-                            </div>
-                          </button>
-                          {/* Status badge */}
-                          <span style={{
-                            position: "absolute", top: 6, left: 6,
-                            padding: "2px 8px", borderRadius: 6, fontSize: "0.6rem", fontWeight: 700,
-                            background: isWatched ? "#10b981" : isPlaying ? "#ef4444" : "rgba(0,0,0,0.6)",
-                            color: "#fff",
+                        {/* Thumbnail */}
+                        <div style={{
+                          width: 56, height: 40, borderRadius: 6, overflow: "hidden", flexShrink: 0,
+                          position: "relative", background: "var(--surface3)",
+                        }}>
+                          {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
+                          <div style={{
+                            position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                            background: isPlaying ? "rgba(239,68,68,0.5)" : "rgba(0,0,0,0.3)",
                           }}>
-                            {isWatched ? "✓ Done" : isPlaying ? "▶ Now" : `#${idx + 1}`}
-                          </span>
+                            {isPlaying ? <Pause size={14} fill="#fff" color="#fff" /> : <Play size={14} fill="#fff" color="#fff" style={{ marginLeft: 1 }} />}
+                          </div>
+                          {isWatched && (
+                            <div style={{
+                              position: "absolute", top: 2, right: 2,
+                              width: 14, height: 14, borderRadius: "50%", background: "#10b981",
+                              display: "flex", alignItems: "center", justifyContent: "center",
+                            }}>
+                              <CheckCircle2 size={8} color="#fff" />
+                            </div>
+                          )}
                         </div>
-                        <div style={{ padding: "10px 14px" }}>
-                          <h4 style={{
-                            fontSize: "0.82rem", fontWeight: 700, color: "var(--text)", lineHeight: 1.3,
-                            display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden",
+                        {/* Info */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{
+                            fontSize: "0.78rem", fontWeight: 600, color: "var(--text)", lineHeight: 1.3,
+                            whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                           }}>
                             {link.title}
-                          </h4>
+                          </p>
                           {link.channelName && (
-                            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", marginTop: 3 }}>
-                              <Youtube size={10} style={{ display: "inline", marginRight: 3, color: "#ef4444" }} />
+                            <p style={{ fontSize: "0.65rem", color: "var(--text-muted)", marginTop: 1 }}>
                               {link.channelName}
                             </p>
                           )}
-                          <a
-                            href={link.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              if (playlistIdx >= 0) {
-                                setPlaylistIdx(idx);
-                                setWatchedVideos(prev => { const s = new Set(prev); for (let i = idx; i < playlistIdx; i++) s.add(i); return s; });
-                              }
-                              onWatchVideo(videoId, link.title, link.channelName ?? "");
-                            }}
-                            className="watch-btn red"
-                            style={{ marginTop: 8 }}
-                          >
-                            <Play size={13} fill="#fff" /> {isPlaying ? "Now Playing" : "Watch"}
-                          </a>
                         </div>
+                        {/* Number */}
+                        <span style={{
+                          fontSize: "0.7rem", fontWeight: 700, color: isPlaying ? "#ef4444" : isWatched ? "#10b981" : "var(--text-faint)",
+                          flexShrink: 0,
+                        }}>
+                          #{idx + 1}
+                        </span>
                       </div>
                     );
                   })}
+                </div>
 
-                  {/* Non-video links */}
-                  {nonVideoLinks.map((link) => (
-                    <a
-                      key={link.id}
-                      href={link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{
-                        display: "flex", alignItems: "center", gap: 10,
-                        padding: "12px 14px", borderRadius: 12,
-                        background: "var(--surface2)", border: "1px solid var(--border)",
-                        textDecoration: "none",
-                      }}
-                    >
-                      <div style={{
-                        width: 36, height: 36, borderRadius: 8, flexShrink: 0,
-                        background: "rgba(6,182,212,0.1)", display: "flex", alignItems: "center", justifyContent: "center",
-                      }}>
-                        {link.type === "blog" ? <Globe size={16} style={{ color: "var(--cyan)" }} /> : <ExternalLink size={16} style={{ color: "var(--brand)" }} />}
-                      </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: "0.82rem", fontWeight: 600, color: "var(--text)", lineHeight: 1.3 }}>{link.title}</p>
-                        <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{link.type === "blog" ? "Blog" : "Link"}</p>
-                      </div>
-                      <ExternalLink size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
-                    </a>
-                  ))}
+                {/* Action Buttons */}
+                <div style={{ display: "flex", gap: 6, marginTop: 14, flexWrap: "wrap" }}>
+                  <button onClick={() => onAskAi(`Explain Day ${day}: ${dayData?.title || ""}`)}
+                    className="simple-pill" style={{ fontSize: "0.75rem" }}>
+                    <Sparkles size={12} /> Explain
+                  </button>
+                  <button onClick={() => onAskAi(`Key points from Day ${day}: ${dayData?.title || ""}`)}
+                    className="simple-pill" style={{ fontSize: "0.75rem" }}>
+                    📝 Key points
+                  </button>
+                  <button onClick={() => { setTab("quiz"); onLoadQuiz(); }}
+                    className="simple-pill" style={{ fontSize: "0.75rem" }}>
+                    <Target size={12} /> Take Quiz
+                  </button>
                 </div>
               </>
-            )}
-
-            {hasLinks && (
-              <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
-                <button onClick={() => onAskAi(`Explain Day ${day}: ${dayData?.title || ""} in simple terms`)} className="simple-pill" style={{ fontSize: "0.75rem" }}>
-                  <Sparkles size={12} /> Explain
-                </button>
-                <button onClick={() => onAskAi(`Key points from Day ${day}: ${dayData?.title || ""}`)} className="simple-pill" style={{ fontSize: "0.75rem" }}>
-                  📝 Key points
-                </button>
-                <button onClick={() => { setTab("quiz"); onLoadQuiz(); }} className="simple-pill" style={{ fontSize: "0.75rem" }}>
-                  <Target size={12} /> Take Quiz
-                </button>
-              </div>
             )}
           </div>
         )}
 
-        {/* QUIZ TAB */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* QUIZ TAB                                                         */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
         {tab === "quiz" && (
-          <>
-            <QuizView
-              quiz={quiz} answers={answers} evalResult={evalResult}
+          <div>
+            <QuizView quiz={quiz} answers={answers} evalResult={evalResult}
               onAnswer={onAnswer} onSubmit={onSubmitQuiz} onNextLesson={onNextLesson}
-              isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading}
-            />
+              isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading} />
 
-            {/* Continue in Telegram after pass */}
             {evalResult?.passed && (
               <div style={{
                 marginTop: 20, padding: "14px 16px", borderRadius: 12,
@@ -719,44 +645,90 @@ export default function DayLinkView({
                   🎉 Day {day} completed!
                 </p>
                 <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-                  <a
-                    href={`https://t.me/csalearningbot?start=day${day + 1}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 6,
-                      padding: "8px 14px", borderRadius: 8,
-                      background: "#229ED9", color: "#fff",
-                      fontSize: "0.78rem", fontWeight: 600, textDecoration: "none",
-                    }}
-                  >
+                  <a href={`https://t.me/csalearningbot?start=day${day + 1}`} target="_blank" rel="noopener noreferrer"
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, background: "#229ED9", color: "#fff", fontSize: "0.78rem", fontWeight: 600, textDecoration: "none" }}>
                     💬 Telegram — Day {day + 1}
                   </a>
-                  <button
-                    onClick={onNextLesson}
-                    style={{
-                      display: "inline-flex", alignItems: "center", gap: 6,
-                      padding: "8px 14px", borderRadius: 8,
-                      background: "linear-gradient(135deg, #059669, #10b981)", color: "#fff",
-                      fontSize: "0.78rem", fontWeight: 600, border: "none", cursor: "pointer",
-                    }}
-                  >
+                  <button onClick={onNextLesson} style={{
+                    display: "inline-flex", alignItems: "center", gap: 6,
+                    padding: "8px 14px", borderRadius: 8,
+                    background: "linear-gradient(135deg, #059669, #10b981)", color: "#fff",
+                    fontSize: "0.78rem", fontWeight: 600, border: "none", cursor: "pointer",
+                  }}>
                     <ArrowRight size={13} /> Next Day Here
                   </button>
                 </div>
               </div>
             )}
-          </>
+          </div>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* ASK AI TAB — with transcript context                              */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {tab === "ai" && (
+          <div>
+            <div style={{
+              padding: "16px", borderRadius: 12, background: "var(--surface2)",
+              border: "1px solid var(--border)", marginBottom: 14,
+            }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <Sparkles size={16} style={{ color: "var(--brand)" }} />
+                <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)" }}>AI Tutor</span>
+              </div>
+              <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.5 }}>
+                Ask anything about Day {day}. I have the video transcripts and can explain concepts, give examples, or create practice questions.
+              </p>
+
+              {/* Quick prompts */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {[
+                  { label: "💡 Explain this topic simply", prompt: `Explain Day ${day}: ${dayData?.title || ""} in simple terms with examples` },
+                  { label: "📝 Key points & notes", prompt: `Give me key points and notes from Day ${day}: ${dayData?.title || ""}` },
+                  { label: "❓ Practice questions", prompt: `Create 5 practice questions about Day ${day}: ${dayData?.title || ""}` },
+                  { label: "🔗 Real-life examples", prompt: `Give real-life examples for Day ${day}: ${dayData?.title || ""}` },
+                ].map((item, i) => (
+                  <button key={i} onClick={() => onAskAi(item.prompt)} style={{
+                    display: "flex", alignItems: "center", gap: 8, width: "100%",
+                    padding: "10px 12px", borderRadius: 8, border: "1px solid var(--border)",
+                    background: "var(--surface)", color: "var(--text)", fontSize: "0.78rem",
+                    fontWeight: 500, cursor: "pointer", textAlign: "left",
+                  }}>
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Transcript section */}
+            {playlistIdx >= 0 && currentTranscript && (
+              <div style={{
+                padding: "12px 14px", borderRadius: 12, background: "var(--surface2)",
+                border: "1px solid var(--border)",
+              }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                  <span style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text)" }}>
+                    📄 Transcript — Video {playlistIdx + 1}
+                  </span>
+                </div>
+                <p style={{
+                  fontSize: "0.72rem", color: "var(--text-muted)", lineHeight: 1.6,
+                  maxHeight: 200, overflowY: "auto",
+                }}>
+                  {currentTranscript.slice(0, 1500)}{currentTranscript.length > 1500 ? "…" : ""}
+                </p>
+              </div>
+            )}
+
+            {loadingTranscript && (
+              <div style={{ textAlign: "center", padding: "12px", color: "var(--text-muted)", fontSize: "0.75rem" }}>
+                <Loader2 size={14} className="spinner" style={{ display: "inline", marginRight: 6 }} />
+                Loading transcript…
+              </div>
+            )}
+          </div>
         )}
       </div>
     </div>
   );
 }
-
-// ─── Shared card style ────────────────────────────────────────────────────────
-const linkCardStyle: React.CSSProperties = {
-  borderRadius: 12,
-  overflow: "hidden",
-  background: "var(--surface)",
-  transition: "border-color 0.2s",
-};
