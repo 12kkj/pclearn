@@ -234,9 +234,14 @@ export default function DayLinkView({
   const [rightTab, setRightTab] = useState<"playlist" | "ai" | "quiz">("playlist");
   const [currentTranscript, setCurrentTranscript] = useState("");
   const [videoTranscriptFull, setVideoTranscriptFull] = useState("");
+  const [videoTranscriptSegments, setVideoTranscriptSegments] = useState<Array<{ text: string; start: number; duration: number; formattedStart: string }>>([]);
   const [loadingTranscript, setLoadingTranscript] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0);
+  const [currentVideoTime, setCurrentVideoTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+  const playerRef = useRef<any>(null);
+  const timeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(380);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
 
@@ -290,6 +295,59 @@ export default function DayLinkView({
     }
   }, [videoCloseTrigger]); // eslint-disable-line
 
+  // Load YouTube IFrame API
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if ((window as any).YT && (window as any).YT.Player) return;
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+  }, []);
+
+  // Track video playback time via YouTube IFrame API
+  useEffect(() => {
+    if (!currentVideoId || activeVideo < 0) {
+      if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
+      setCurrentVideoTime(0);
+      setVideoDuration(0);
+      return;
+    }
+    // Wait for iframe to load, then poll time
+    const timer = setTimeout(() => {
+      const iframe = document.querySelector(".dlv-iframe") as HTMLIFrameElement;
+      if (!iframe) return;
+      // Use postMessage API to get time
+      const pollTime = () => {
+        try {
+          iframe.contentWindow?.postMessage(JSON.stringify({ event: "listening", id: currentVideoId }), "*");
+        } catch { /* cross-origin ok */ }
+      };
+      pollTime();
+      timeIntervalRef.current = setInterval(pollTime, 3000);
+    }, 2000);
+    return () => {
+      clearTimeout(timer);
+      if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
+    };
+  }, [currentVideoId, activeVideo]);
+
+  // Listen for YouTube player state messages
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      try {
+        const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
+        if (data.info && typeof data.info.currentTime === "number") {
+          setCurrentVideoTime(data.info.currentTime);
+        }
+        if (data.info && typeof data.info.duration === "number") {
+          setVideoDuration(data.info.duration);
+        }
+      } catch { /* ignore */ }
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
+
   // Load transcript via Cloudflare Worker
   useEffect(() => {
     if (activeVideo >= 0 && videoLinks[activeVideo]) {
@@ -299,14 +357,61 @@ export default function DayLinkView({
         fetchTranscript(vid).then(result => {
           setCurrentTranscript(result.text);
           setVideoTranscriptFull(result.text);
+          setVideoTranscriptSegments(result.segments || []);
           setLoadingTranscript(false);
         });
       }
     } else {
       setCurrentTranscript("");
       setVideoTranscriptFull("");
+      setVideoTranscriptSegments([]);
     }
   }, [activeVideo]); // eslint-disable-line
+
+  // ── Smart segment extraction ──
+  const extractRelevantSegments = useCallback((msg: string): string => {
+    if (!videoTranscriptSegments.length) return videoTranscriptFull.slice(0, 4000);
+
+    // Parse time references from the message (e.g., "2:30", "1:15:00", "at 0:45")
+    const timeRegex = /(?:(\d{1,3}):)?(\d{1,2}):(\d{2})/g;
+    let targetTime = -1;
+    let match;
+    while ((match = timeRegex.exec(msg)) !== null) {
+      const hours = match[1] ? parseInt(match[1]) : 0;
+      const mins = parseInt(match[2]);
+      const secs = parseInt(match[3]);
+      targetTime = hours * 3600 + mins * 60 + secs;
+      break;
+    }
+
+    // If no time mentioned in message, use current playback time
+    if (targetTime < 0) {
+      targetTime = currentVideoTime;
+    }
+
+    // Find the closest segment to targetTime
+    let closestIdx = 0;
+    let minDiff = Infinity;
+    for (let i = 0; i < videoTranscriptSegments.length; i++) {
+      const diff = Math.abs(videoTranscriptSegments[i].start - targetTime);
+      if (diff < minDiff) { minDiff = diff; closestIdx = i; }
+    }
+
+    // Get 2 before and 2 after
+    const startIdx = Math.max(0, closestIdx - 2);
+    const endIdx = Math.min(videoTranscriptSegments.length - 1, closestIdx + 2);
+    const relevant = videoTranscriptSegments.slice(startIdx, endIdx + 1);
+
+    const timeLabel = targetTime > 0
+      ? `${Math.floor(targetTime / 60)}:${String(Math.floor(targetTime % 60)).padStart(2, "0")}`
+      : "current position";
+
+    return `Video "${currentVideo?.title || "current video"}"\n` +
+      `Current playback: ${timeLabel} / ${videoDuration > 0 ? `${Math.floor(videoDuration / 60)}:${String(Math.floor(videoDuration % 60)).padStart(2, "0")}` : "unknown"}\n\n` +
+      `Relevant transcript segments (±2 around ${timeLabel}):\n` +
+      relevant.map(s => `[${s.formattedStart}] ${s.text}`).join("\n") +
+      `\n\nFull transcript preview (first 2000 chars):\n${videoTranscriptFull.slice(0, 2000)}`;
+  }, [videoTranscriptSegments, videoTranscriptFull, currentVideoTime, videoDuration, currentVideo]);
 
   const playVideo = useCallback((idx: number) => {
     if (idx === activeVideo) return;
@@ -620,8 +725,9 @@ export default function DayLinkView({
                     chatHistory={chatHistory}
                     learner={learner}
                     onSendMessage={async (msg, modelId) => {
-                      const contextMsg = videoTranscriptFull
-                        ? `[Video Transcript context for "${currentVideo?.title || "current video"}"]: ${videoTranscriptFull.slice(0, 4000)}\n\nStudent question: ${msg}`
+                      const transcriptContext = extractRelevantSegments(msg);
+                      const contextMsg = transcriptContext
+                        ? `[VIDEO CONTEXT]\n${transcriptContext}\n\n[STUDENT QUESTION]\n${msg}`
                         : msg;
                       await onSendChat(contextMsg, modelId);
                     }}
