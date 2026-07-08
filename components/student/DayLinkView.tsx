@@ -5,7 +5,7 @@ import {
   Play, Pause, SkipForward, SkipBack, ExternalLink, Globe,
   Sparkles, CheckCircle2, Target, ArrowRight, Loader2, RotateCcw,
   MessageSquare, List, X, Clock, FileText, Brain, ListChecks, BookOpen,
-  ChevronDown, ChevronUp, Maximize2,
+  ChevronDown, ChevronUp, Maximize2, PanelRightClose, PanelRightOpen,
 } from "lucide-react";
 import type { AdminDayContent, AdminResourceLink } from "@/types";
 import type { LearnerState, QuizQuestion, ChatMessage } from "@/types";
@@ -261,6 +261,7 @@ export default function DayLinkView({
   const [loadingTranscript, setLoadingTranscript] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const playerRef = useRef<any>(null);
@@ -586,6 +587,15 @@ export default function DayLinkView({
                     <span className="dlv-tab-label">Transcript</span>
                     {transcriptOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} className="dlv-tab-chevron" />}
                   </button>
+
+                  {hasVideos && (
+                    <button
+                      onClick={() => setSidebarOpen(o => !o)}
+                      className="dlv-tab-btn"
+                      title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}>
+                      {sidebarOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -658,14 +668,14 @@ export default function DayLinkView({
         </div>
 
         {/* ── Resize Handle ── */}
-        {hasVideos && (
+        {hasVideos && sidebarOpen && (
           <div className="dlv-resize-handle" onMouseDown={onDragStart} onTouchStart={onDragStart}>
             <div className="dlv-resize-grip" />
           </div>
         )}
 
         {/* ── Right: Sidebar (Playlist / AI / Quiz) ─────────────────────── */}
-        {hasVideos && (
+        {hasVideos && sidebarOpen && (
           <div className="dlv-sidebar" style={{ width: sidebarWidth }}>
             {/* Sidebar Tab Bar */}
             <div className="dlv-sidebar-tabs">
