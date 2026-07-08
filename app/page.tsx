@@ -2405,6 +2405,11 @@ export default function Home() {
             }}
             onVideoClose={() => setVideoCloseTrigger(n => n + 1)}
             videoCloseTrigger={videoCloseTrigger}
+            chatHistory={learner.chatHistory}
+            onSendChat={handleSendChat}
+            chatLoading={chatLoading}
+            onClearHistory={clearChat}
+            onModelChange={setPreferredChatModel}
           />
         )}
 

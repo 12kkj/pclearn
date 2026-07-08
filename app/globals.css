@@ -582,6 +582,22 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .dlv-ai-emoji { font-size: 1.15rem; flex-shrink: 0; }
 .dlv-ai-label { font-size: 0.83rem; line-height: 1.3; }
 
+/* ── Inline AI Chat (bottom panel) ── */
+.dlv-ai-inline {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.dlv-ai-inline > * {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
 /* ── No video playing ── */
 .dlv-no-video {
   flex: 1;

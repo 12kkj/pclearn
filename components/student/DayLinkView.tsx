@@ -8,7 +8,8 @@ import {
   ChevronDown, ChevronUp, Maximize2,
 } from "lucide-react";
 import type { AdminDayContent, AdminResourceLink } from "@/types";
-import type { LearnerState, QuizQuestion } from "@/types";
+import type { LearnerState, QuizQuestion, ChatMessage } from "@/types";
+import ChatPanel from "@/components/chat/ChatPanel";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 interface QuizData { title: string; questions: QuizQuestion[]; }
@@ -42,6 +43,12 @@ interface Props {
   onVideoClose?: () => void;
   videoCloseTrigger?: number;
   quizOnly?: boolean;
+  /* Inline chat props for AI tab */
+  chatHistory?: ChatMessage[];
+  onSendChat?: (msg: string, modelId: string) => Promise<void>;
+  chatLoading?: boolean;
+  onClearHistory?: () => void;
+  onModelChange?: (modelId: string) => void;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -208,6 +215,11 @@ export default function DayLinkView({
   onStartDay, onAskAi, onWatchVideo, onVideoClose,
   videoCloseTrigger = 0,
   quizOnly = false,
+  chatHistory = [],
+  onSendChat,
+  chatLoading = false,
+  onClearHistory,
+  onModelChange,
 }: Props) {
   const [activeVideo, setActiveVideo] = useState<number>(-1);
   const [watchedVideos, setWatchedVideos] = useState<Set<number>>(new Set());
@@ -427,34 +439,57 @@ export default function DayLinkView({
                         ) : currentTranscript ? (
                           <p className="dlv-transcript-text">{currentTranscript}</p>
                         ) : (
-                          <div className="dlv-panel-empty">No transcript available for this video</div>
+                          <div className="dlv-panel-empty">
+                            <FileText size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+                            <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text2)", marginBottom: 4 }}>
+                              No transcript available
+                            </p>
+                            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                              This video doesn't have captions enabled.
+                              Try <strong>Ask AI</strong> to get a summary instead.
+                            </p>
+                          </div>
                         )}
                       </div>
                     )}
 
-                    {/* AI */}
+                    {/* AI — Inline ChatPanel */}
                     {bottomTab === "ai" && (
-                      <div className="dlv-panel-content">
-                        <div className="dlv-panel-header">
-                          <Brain size={18} style={{ color: "var(--brand)" }} />
-                          <span className="dlv-panel-title">AI Tutor</span>
-                          <span className="dlv-panel-subtitle">Ask about Day {day}</span>
-                        </div>
-                        <div className="dlv-ai-grid">
-                          {[
-                            { emoji: "💡", label: "Explain this simply", prompt: `Explain the video "${currentVideo?.title || `Day ${day}`}" in simple terms with examples` },
-                            { emoji: "📝", label: "Key points & notes", prompt: `Give me key points and notes from "${currentVideo?.title || `Day ${day}`}"` },
-                            { emoji: "❓", label: "Practice questions", prompt: `Create 5 practice questions about "${currentVideo?.title || `Day ${day}`}"` },
-                            { emoji: "🔗", label: "Real-life examples", prompt: `Give real-life examples for "${currentVideo?.title || `Day ${day}`}"` },
-                            { emoji: "🚀", label: "What to learn next", prompt: `After watching "${currentVideo?.title || `Day ${day}`}", what should I learn next?` },
-                            { emoji: "🎯", label: "Quick summary", prompt: `Give a 3-sentence summary of "${currentVideo?.title || `Day ${day}`}"` },
-                          ].map((item, i) => (
-                            <button key={i} onClick={() => onAskAi(item.prompt)} className="dlv-ai-btn">
-                              <span className="dlv-ai-emoji">{item.emoji}</span>
-                              <span className="dlv-ai-label">{item.label}</span>
-                            </button>
-                          ))}
-                        </div>
+                      <div className="dlv-ai-inline">
+                        {onSendChat ? (
+                          <ChatPanel
+                            compact
+                            chatHistory={chatHistory}
+                            learner={learner}
+                            onSendMessage={onSendChat}
+                            onClearHistory={onClearHistory || (() => {})}
+                            onModelChange={onModelChange || (() => {})}
+                            isLoading={chatLoading}
+                          />
+                        ) : (
+                          <div className="dlv-panel-content">
+                            <div className="dlv-panel-header">
+                              <Brain size={18} style={{ color: "var(--brand)" }} />
+                              <span className="dlv-panel-title">AI Tutor</span>
+                              <span className="dlv-panel-subtitle">Ask about Day {day}</span>
+                            </div>
+                            <div className="dlv-ai-grid">
+                              {[
+                                { emoji: "💡", label: "Explain this simply", prompt: `Explain the video "${currentVideo?.title || `Day ${day}`}" in simple terms with examples` },
+                                { emoji: "📝", label: "Key points & notes", prompt: `Give me key points and notes from "${currentVideo?.title || `Day ${day}`}"` },
+                                { emoji: "❓", label: "Practice questions", prompt: `Create 5 practice questions about "${currentVideo?.title || `Day ${day}`}"` },
+                                { emoji: "🔗", label: "Real-life examples", prompt: `Give real-life examples for "${currentVideo?.title || `Day ${day}`}"` },
+                                { emoji: "🚀", label: "What to learn next", prompt: `After watching "${currentVideo?.title || `Day ${day}`}", what should I learn next?` },
+                                { emoji: "🎯", label: "Quick summary", prompt: `Give a 3-sentence summary of "${currentVideo?.title || `Day ${day}`}"` },
+                              ].map((item, i) => (
+                                <button key={i} onClick={() => onAskAi(item.prompt)} className="dlv-ai-btn">
+                                  <span className="dlv-ai-emoji">{item.emoji}</span>
+                                  <span className="dlv-ai-label">{item.label}</span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )}
 
