@@ -2261,48 +2261,21 @@ export default function Home() {
         />
       )}
 
-      {/* ── Header ── */}
-      <header className="app-header" style={{
-        display: "flex", alignItems: "center", gap: 12, padding: "10px 14px",
-        borderBottom: "1px solid var(--border)", background: "var(--surface)",
-        flexShrink: 0,
-      }}>
-        {/* Logo */}
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
-          <div style={{
-            width: 34, height: 34, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center",
-            background: "linear-gradient(135deg, var(--brand), var(--brand2))", fontSize: "1.1rem",
-          }}>🎓</div>
-          <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
-            <div style={{ fontWeight: 800, fontSize: "0.88rem", color: "var(--text)", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>CSA</div>
-            <div style={{ fontSize: "0.65rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Day {learner.currentDay || 1} • {learner.completedDays?.length ?? 0}/100</div>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div style={{ flex: 1 }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-          {isAdminUser && (
-            <button
-              className="btn-primary sm"
-              onClick={() => setShowAdminPanel(true)}
-              style={{ padding: "6px 12px", fontSize: "0.75rem" }}
-            >
-              <Shield size={12} /> Admin
-            </button>
-          )}
-          <button className="btn-icon" onClick={() => { setEditName(learner.name); setEditProfile(learner.profile); setDisplayNamePassword(""); setDisplayNameMsg(null); setShowSettings(true); }} data-tip="Settings">
-            <Settings size={14} />
-          </button>
-        </div>
-      </header>
-
       {/* ── Tab Bar ── */}
       <nav style={{
-        display: "flex", alignItems: "center", gap: 2, padding: "6px 12px 0",
+        display: "flex", alignItems: "center", gap: 2, padding: "8px 12px",
         borderBottom: "1px solid var(--border)", background: "var(--surface)",
         overflowX: "auto", flexShrink: 0,
       }}>
+        {/* Logo */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0, marginRight: 6 }}>
+          <div style={{
+            width: 28, height: 28, borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center",
+            background: "linear-gradient(135deg, var(--brand), var(--brand2))", fontSize: "0.85rem",
+          }}>🎓</div>
+          <span style={{ fontWeight: 800, fontSize: "0.82rem", color: "var(--text)", lineHeight: 1.2 }}>CSA</span>
+        </div>
+
         {TABS.map(tab => (
           <button
             key={tab.id}
@@ -2329,6 +2302,27 @@ export default function Home() {
             </span>
           </div>
         )}
+
+        {/* Settings + Admin */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flexShrink: 0, marginLeft: "auto" }}>
+          {isAdminUser && (
+            <button
+              className="btn-primary sm"
+              onClick={() => setShowAdminPanel(true)}
+              style={{ padding: "5px 10px", fontSize: "0.7rem" }}
+            >
+              <Shield size={11} /> Admin
+            </button>
+          )}
+          <button
+            className="btn-icon"
+            onClick={() => { setEditName(learner.name); setEditProfile(learner.profile); setDisplayNamePassword(""); setDisplayNameMsg(null); setShowSettings(true); }}
+            data-tip="Settings"
+            style={{ width: 30, height: 30 }}
+          >
+            <Settings size={13} />
+          </button>
+        </div>
       </nav>
 
       {/* ── Main Content ── */}

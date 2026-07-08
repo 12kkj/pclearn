@@ -595,6 +595,36 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   overflow: hidden;
   height: 100%;
 }
+
+/* ── Resize Handle ── */
+.dlv-resize-handle {
+  width: 6px;
+  flex-shrink: 0;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  transition: background 0.15s;
+  position: relative;
+  z-index: 5;
+}
+.dlv-resize-handle:hover,
+.dlv-resize-handle:active {
+  background: var(--brand);
+}
+.dlv-resize-handle:hover .dlv-resize-grip,
+.dlv-resize-handle:active .dlv-resize-grip {
+  opacity: 1;
+}
+.dlv-resize-grip {
+  width: 2px;
+  height: 32px;
+  border-radius: 2px;
+  background: var(--border2);
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
 .dlv-sidebar-tabs {
   display: flex;
   border-bottom: 1px solid var(--border);
@@ -1231,6 +1261,15 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 /* Mobile: vertical stack */
 @media (max-width: 768px) {
   .dlv-body { flex-direction: column; }
+  .dlv-resize-handle { display: none; }
+  .dlv-sidebar {
+    width: 100% !important;
+    height: auto;
+    max-height: 50vh;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
   .dlv-playlist {
     width: 100%;
     border-left: none;
@@ -1258,6 +1297,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 /* Small mobile */
 @media (max-width: 480px) {
+  .dlv-sidebar { max-height: 45vh; }
   .dlv-playlist { max-height: 230px; }
   .dlv-playlist-thumb { width: 56px; height: 40px; }
   .dlv-playlist-item { gap: 8px; padding: 7px 12px; }

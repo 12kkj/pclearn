@@ -228,6 +228,32 @@ export default function DayLinkView({
   const [loadingTranscript, setLoadingTranscript] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0);
+  const [sidebarWidth, setSidebarWidth] = useState(380);
+  const dragRef = useRef<{ startX: number; startW: number } | null>(null);
+
+  const onDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    e.preventDefault();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    dragRef.current = { startX: clientX, startW: sidebarWidth };
+    const onMove = (ev: MouseEvent | TouchEvent) => {
+      if (!dragRef.current) return;
+      const cx = 'touches' in ev ? ev.touches[0].clientX : ev.clientX;
+      const delta = dragRef.current.startX - cx;
+      const newW = Math.max(260, Math.min(600, dragRef.current.startW + delta));
+      setSidebarWidth(newW);
+    };
+    const onUp = () => {
+      dragRef.current = null;
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onUp);
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('touchend', onUp);
+  }, [sidebarWidth]);
 
   const links = dayData?.resources ?? [];
   const videoLinks = links.filter(l => l.type === "youtube");
@@ -457,9 +483,16 @@ export default function DayLinkView({
           )}
         </div>
 
+        {/* ── Resize Handle ── */}
+        {hasVideos && (
+          <div className="dlv-resize-handle" onMouseDown={onDragStart} onTouchStart={onDragStart}>
+            <div className="dlv-resize-grip" />
+          </div>
+        )}
+
         {/* ── Right: Sidebar (Playlist / AI / Quiz) ─────────────────────── */}
         {hasVideos && (
-          <div className="dlv-sidebar">
+          <div className="dlv-sidebar" style={{ width: sidebarWidth }}>
             {/* Sidebar Tab Bar */}
             <div className="dlv-sidebar-tabs">
               <button
