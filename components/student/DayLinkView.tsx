@@ -5,6 +5,7 @@ import {
   Play, Pause, SkipForward, SkipBack, ExternalLink, Globe,
   Sparkles, CheckCircle2, Target, ArrowRight, Loader2, RotateCcw,
   MessageSquare, List, X, Clock, FileText, Brain, ListChecks, BookOpen,
+  ChevronDown, ChevronUp, Maximize2,
 } from "lucide-react";
 import type { AdminDayContent, AdminResourceLink } from "@/types";
 import type { LearnerState, QuizQuestion } from "@/types";
@@ -51,6 +52,10 @@ function getThumbnail(url: string): string {
   const id = getVideoId(url);
   return id ? `https://img.youtube.com/vi/${id}/hqdefault.jpg` : "";
 }
+function getThumbnailHq(url: string): string {
+  const id = getVideoId(url);
+  return id ? `https://img.youtube.com/vi/${id}/maxresdefault.jpg` : "";
+}
 
 // ─── Transcript Cache ─────────────────────────────────────────────────────────
 const TRANSCRIPT_KEY = "csa_transcripts";
@@ -81,7 +86,7 @@ async function fetchTranscript(videoId: string): Promise<string> {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// QUIZ VIEW (compact for bottom panel)
+// QUIZ VIEW
 // ══════════════════════════════════════════════════════════════════════════════
 function QuizView({
   quiz, answers, evalResult, onAnswer, onSubmit, onNextLesson,
@@ -94,105 +99,81 @@ function QuizView({
 }) {
   if (quizLoading) {
     return (
-      <div style={{ textAlign: "center", padding: "30px 16px" }}>
-        <Loader2 size={24} className="spinner" style={{ color: "var(--brand)", margin: "0 auto 8px" }} />
-        <p style={{ fontSize: "0.88rem", color: "var(--text-muted)" }}>Loading quiz…</p>
+      <div className="dlv-quiz-loading">
+        <Loader2 size={28} className="spinner" style={{ color: "var(--brand)" }} />
+        <p style={{ fontSize: "0.9rem", color: "var(--text-muted)", marginTop: 10 }}>Loading quiz…</p>
       </div>
     );
   }
   if (!quiz) {
     return (
-      <div style={{ textAlign: "center", padding: "30px 16px" }}>
-        <Target size={24} style={{ color: "var(--brand)", margin: "0 auto 8px", opacity: 0.5 }} />
-        <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Ready for the quiz?</p>
-        <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 12 }}>Need 67% to unlock Day {day + 1}</p>
-        <button onClick={onLoadQuiz} className="watch-btn purple" style={{ maxWidth: 200, margin: "0 auto" }}>
-          <Target size={14} /> Start Quiz
+      <div className="dlv-quiz-empty">
+        <div className="dlv-quiz-empty-icon">🧪</div>
+        <p style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Ready for the Quiz?</p>
+        <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: 20, lineHeight: 1.6 }}>
+          Score 67% or more to unlock Day {day + 1}
+        </p>
+        <button onClick={onLoadQuiz} className="dlv-quiz-start-btn">
+          <Target size={16} /> Start Quiz
         </button>
       </div>
     );
   }
   const allAnswered = quiz.questions.every(q => answers[q.id]?.trim());
   return (
-    <div>
+    <div className="dlv-quiz-content">
       {evalResult && (
-        <div style={{
-          padding: "12px 16px", borderRadius: 10, marginBottom: 14, textAlign: "center",
-          background: evalResult.passed ? "rgba(16,185,129,0.1)" : "rgba(239,68,68,0.08)",
-          border: `1px solid ${evalResult.passed ? "var(--green)" : "var(--red)"}30`,
-          color: evalResult.passed ? "var(--green)" : "var(--red)", fontWeight: 700, fontSize: "0.9rem",
-        }}>
-          {evalResult.passed ? "🎉" : "💪"} {evalResult.passed
-            ? `PASSED — ${evalResult.correctCount}/${evalResult.totalQuestions}`
-            : `${evalResult.correctCount}/${evalResult.totalQuestions} — Need 67%`}
+        <div className={`dlv-result-banner ${evalResult.passed ? "passed" : "failed"}`}>
+          <span className="dlv-result-emoji">{evalResult.passed ? "🎉" : "💪"}</span>
+          <div>
+            <div className="dlv-result-score">
+              {evalResult.passed ? "PASSED" : "TRY AGAIN"} — {evalResult.correctCount}/{evalResult.totalQuestions}
+            </div>
+            {evalResult.mentorMessage && (
+              <div className="dlv-result-msg">{evalResult.mentorMessage}</div>
+            )}
+          </div>
         </div>
       )}
-      {evalResult?.mentorMessage && (
-        <div style={{
-          padding: "10px 14px", borderRadius: 10, marginBottom: 14, fontSize: "0.82rem",
-          background: "var(--surface2)", border: "1px solid var(--border)", color: "var(--text2)", lineHeight: 1.5,
-        }}>
-          {evalResult.mentorMessage}
-        </div>
-      )}
-      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+      <div className="dlv-questions-list">
         {quiz.questions.map((q, idx) => {
           const feedback = evalResult?.feedback.find(f => f.questionId === q.id);
           const isCorrect = feedback?.isCorrect;
           const isMCQ = q.type === "mcq" || q.type === "tf";
           return (
-            <div key={q.id} style={{
-              padding: 14, borderRadius: 12, background: "var(--surface)",
-              border: `1px solid ${feedback ? (isCorrect ? "var(--green)" : "var(--red)") : "var(--border)"}`,
-            }}>
-              <p style={{ fontSize: "0.88rem", fontWeight: 600, color: "var(--text)", marginBottom: 10, lineHeight: 1.4 }}>
-                <span style={{ color: "var(--brand2)", fontWeight: 700 }}>Q{idx + 1}. </span>{q.question}
+            <div key={q.id} className={`dlv-question-card ${feedback ? (isCorrect ? "correct" : "wrong") : ""}`}>
+              <p className="dlv-question-text">
+                <span className="dlv-question-num">Q{idx + 1}.</span> {q.question}
               </p>
               {isMCQ && q.options.length > 0 ? (
-                <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <div className="dlv-options-list">
                   {q.options.map(opt => {
                     const isSelected = answers[q.id] === opt;
-                    let bg = "var(--surface2)", border = "var(--border)", color = "var(--text2)";
+                    let state = "";
                     if (feedback) {
-                      if (opt === feedback.correctAnswer) { bg = "rgba(16,185,129,0.12)"; border = "var(--green)"; color = "var(--green)"; }
-                      else if (isSelected && !isCorrect) { bg = "rgba(239,68,68,0.1)"; border = "var(--red)"; color = "var(--red)"; }
-                    } else if (isSelected) { bg = "rgba(99,102,241,0.12)"; border = "var(--brand)"; color = "var(--brand2)"; }
+                      if (opt === feedback.correctAnswer) state = "correct";
+                      else if (isSelected && !isCorrect) state = "wrong";
+                    } else if (isSelected) state = "selected";
                     return (
                       <button key={opt} onClick={() => !evalResult && onAnswer(q.id, opt)} disabled={!!evalResult}
-                        style={{
-                          display: "flex", alignItems: "center", gap: 8, width: "100%",
-                          padding: "10px 14px", borderRadius: 8, border: `1.5px solid ${border}`,
-                          background: bg, color, fontSize: "0.84rem", fontWeight: 500,
-                          cursor: evalResult ? "default" : "pointer", textAlign: "left",
-                        }}>
-                        <span style={{
-                          width: 18, height: 18, borderRadius: "50%", border: "2px solid currentColor",
-                          display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: "0.65rem",
-                        }}>
+                        className={`dlv-option-btn ${state}`}>
+                        <span className="dlv-option-indicator">
                           {feedback && opt === feedback.correctAnswer && "✓"}
                           {feedback && isSelected && !isCorrect && opt !== feedback.correctAnswer && "✗"}
                           {!feedback && isSelected && "●"}
-                        </span>{opt}
+                        </span>
+                        {opt}
                       </button>
                     );
                   })}
                 </div>
               ) : (
                 <textarea placeholder="Type your answer…" value={answers[q.id] ?? ""}
-                  onChange={e => !evalResult && onAnswer(q.id, e.target.value)} disabled={!!evalResult} rows={2}
-                  style={{
-                    width: "100%", padding: "10px", borderRadius: 8,
-                    background: "var(--surface2)", border: "1px solid var(--border)",
-                    color: "var(--text)", fontSize: "0.84rem", resize: "none", fontFamily: "inherit",
-                  }} />
+                  onChange={e => !evalResult && onAnswer(q.id, e.target.value)} disabled={!!evalResult} rows={3}
+                  className="dlv-answer-textarea" />
               )}
               {feedback && (
-                <div style={{
-                  marginTop: 8, padding: "8px 12px", borderRadius: 8, fontSize: "0.8rem",
-                  background: isCorrect ? "rgba(16,185,129,0.06)" : "rgba(239,68,68,0.06)",
-                  border: `1px solid ${isCorrect ? "var(--green)" : "var(--red)"}20`,
-                  color: "var(--text2)", lineHeight: 1.4,
-                }}>
+                <div className={`dlv-feedback-box ${isCorrect ? "correct" : "wrong"}`}>
                   {isCorrect ? "✅ " : `❌ ${feedback.correctAnswer}. `}{feedback.explanation}
                 </div>
               )}
@@ -200,18 +181,17 @@ function QuizView({
           );
         })}
       </div>
-      <div style={{ marginTop: 16 }}>
+      <div className="dlv-quiz-actions">
         {!evalResult ? (
-          <button onClick={onSubmit} disabled={!allAnswered || isSubmitting} className="watch-btn purple"
-            style={{ opacity: (!allAnswered || isSubmitting) ? 0.5 : 1, cursor: (!allAnswered || isSubmitting) ? "not-allowed" : "pointer" }}>
-            {isSubmitting ? <><Loader2 size={15} className="spinner" /> Evaluating…</> : <><Target size={15} /> Submit</>}
+          <button onClick={onSubmit} disabled={!allAnswered || isSubmitting} className="dlv-submit-btn">
+            {isSubmitting ? <><Loader2 size={16} className="spinner" /> Evaluating…</> : <><Target size={16} /> Submit Quiz</>}
           </button>
         ) : evalResult.passed ? (
-          <button onClick={onNextLesson} className="watch-btn" style={{ background: "linear-gradient(135deg, #059669, #10b981)", color: "#fff" }}>
-            <ArrowRight size={15} /> Unlock Day {day + 1}
+          <button onClick={onNextLesson} className="dlv-next-btn">
+            <ArrowRight size={16} /> Unlock Day {day + 1}
           </button>
         ) : (
-          <button onClick={onSubmit} className="watch-btn purple"><RotateCcw size={15} /> Try Again</button>
+          <button onClick={onSubmit} className="dlv-retry-btn"><RotateCcw size={16} /> Try Again</button>
         )}
       </div>
     </div>
@@ -234,6 +214,7 @@ export default function DayLinkView({
   const [bottomTab, setBottomTab] = useState<"transcript" | "ai" | "quiz" | "none">("none");
   const [currentTranscript, setCurrentTranscript] = useState("");
   const [loadingTranscript, setLoadingTranscript] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const links = dayData?.resources ?? [];
   const videoLinks = links.filter(l => l.type === "youtube");
@@ -244,7 +225,7 @@ export default function DayLinkView({
   // Auto-load quiz in quiz-only mode
   useEffect(() => { if (quizOnly && !quiz && !quizLoading) onLoadQuiz(); }, [quizOnly]); // eslint-disable-line
 
-  // Auto-play first video when day loads (if has videos and nothing playing)
+  // Auto-play first video when day loads
   useEffect(() => {
     if (hasVideos && activeVideo === -1 && !quizOnly) {
       setActiveVideo(0);
@@ -276,6 +257,7 @@ export default function DayLinkView({
     if (idx === activeVideo) return;
     if (activeVideo >= 0) setWatchedVideos(prev => new Set([...prev, activeVideo]));
     setActiveVideo(idx);
+    setBottomTab("none");
   }, [activeVideo]);
 
   const startPlaylist = useCallback(() => { setWatchedVideos(new Set()); playVideo(0); }, [playVideo]);
@@ -285,10 +267,10 @@ export default function DayLinkView({
   // ─── Empty ──
   if (!day) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", color: "var(--text-muted)" }}>
-        <div style={{ fontSize: "3rem", marginBottom: 12 }}>📚</div>
-        <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>Select a day to begin</h3>
-        <p style={{ fontSize: "0.85rem", maxWidth: 300, textAlign: "center", lineHeight: 1.5 }}>Pick a day from the sidebar to start learning.</p>
+      <div className="dlv-empty-state">
+        <div className="dlv-empty-icon">📚</div>
+        <h3 className="dlv-empty-title">Select a day to begin</h3>
+        <p className="dlv-empty-desc">Pick a day from the sidebar to start learning.</p>
       </div>
     );
   }
@@ -296,19 +278,19 @@ export default function DayLinkView({
   // ─── Quiz-only ──
   if (quizOnly) {
     return (
-      <div style={{ height: "100%", overflowY: "auto" }}>
-        <div style={{ maxWidth: 560, margin: "0 auto", padding: "16px" }}>
-          <div style={{ background: "linear-gradient(135deg, #8b5cf6, #6366f1)", borderRadius: 14, padding: "16px 20px", marginBottom: 16, color: "#fff" }}>
-            <h2 style={{ fontSize: "1rem", fontWeight: 800 }}>Day {day} Quiz</h2>
-            <p style={{ fontSize: "0.78rem", opacity: 0.8 }}>{dayData?.title || ""} • Need 67% to pass</p>
+      <div className="dlv-quiz-only-shell">
+        <div className="dlv-quiz-only-inner">
+          <div className="dlv-quiz-only-header">
+            <h2 className="dlv-quiz-only-title">Day {day} Quiz</h2>
+            <p className="dlv-quiz-only-sub">{dayData?.title || ""} · Score 67%+ to unlock next day</p>
           </div>
           <QuizView quiz={quiz} answers={answers} evalResult={evalResult}
             onAnswer={onAnswer} onSubmit={onSubmitQuiz} onNextLesson={onNextLesson}
             isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading} />
           {evalResult?.passed && (
-            <div style={{ marginTop: 20, textAlign: "center" }}>
+            <div className="dlv-tg-link-wrap">
               <a href={`https://t.me/csalearningbot?start=day${day + 1}`} target="_blank" rel="noopener noreferrer"
-                style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 18px", borderRadius: 8, background: "#229ED9", color: "#fff", fontSize: "0.85rem", fontWeight: 600, textDecoration: "none" }}>
+                className="dlv-tg-link">
                 💬 Continue in Telegram — Day {day + 1}
               </a>
             </div>
@@ -319,178 +301,157 @@ export default function DayLinkView({
   }
 
   // ══════════════════════════════════════════════════════════════════════════
-  // MAIN VIEW
+  // MAIN VIEW — YouTube-style layout
   // ══════════════════════════════════════════════════════════════════════════
   return (
-    <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+    <div className="dlv-root">
 
       {/* ── Day Header ──────────────────────────────────────────────────── */}
-      <div style={{
-        padding: "10px 16px", background: "var(--surface)", borderBottom: "1px solid var(--border)",
-        display: "flex", alignItems: "center", gap: 10, flexShrink: 0,
-      }}>
-        <div style={{
-          width: 30, height: 30, borderRadius: 8, background: "linear-gradient(135deg, var(--brand), var(--brand2))",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: "0.8rem", fontWeight: 800, color: "#fff", flexShrink: 0,
-        }}>{day}</div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h2 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--text)", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-            {dayData?.title || `Day ${day}`}
-          </h2>
+      <div className="dlv-header">
+        <div className="dlv-header-badge">{day}</div>
+        <div className="dlv-header-text">
+          <h2 className="dlv-header-title">{dayData?.title || `Day ${day}`}</h2>
           {dayData?.description && (
-            <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-              {dayData.description}
-            </p>
+            <p className="dlv-header-desc">{dayData.description}</p>
           )}
+        </div>
+        <div className="dlv-header-meta">
+          <span className="dlv-header-pill">
+            🎬 {videoLinks.length} video{videoLinks.length !== 1 ? "s" : ""}
+          </span>
+          <span className="dlv-header-pill">
+            ✅ {watchedVideos.size} watched
+          </span>
         </div>
       </div>
 
-      {/* ── Main: Player + Sidebar ─────────────────────────────────────── */}
-      <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0, flexDirection: "row" }} className="player-layout">
+      {/* ── Main Body ───────────────────────────────────────────────────── */}
+      <div className="dlv-body">
 
-        {/* ── Left: Player + Below Panel ───────────────────────────────── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0, maxWidth: 850 }} className="player-main">
+        {/* ── Left: Player Area ─────────────────────────────────────────── */}
+        <div className="dlv-player-area">
 
           {activeVideo >= 0 && currentVideo ? (
             <>
-              {/* ── Video Player (responsive) ── */}
-              <div style={{ flexShrink: 0, background: "#000", position: "relative", width: "100%" }}>
-                <div style={{ position: "relative", width: "100%", height: "auto", aspectRatio: "16/9" }}>
+              {/* ── Video Player ── */}
+              <div className="dlv-video-wrap">
+                <div className="dlv-video-ratio">
                   <iframe
                     src={`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&rel=0&modestbranding=1`}
                     title={currentVideo.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture"
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                     allowFullScreen
-                    style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: "none" }}
+                    className="dlv-iframe"
                   />
                 </div>
               </div>
 
-              {/* ── Below Video: Title + Actions + Toolbar ── */}
-              <div style={{
-                padding: "10px 14px", background: "var(--surface)", borderBottom: "1px solid var(--border)",
-                flexShrink: 0,
-              }}>
-                {/* Title + channel on one line */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                  <p style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--text)", flex: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                    {currentVideo.title}
-                  </p>
-                  {currentVideo.channelName && (
-                    <span style={{ fontSize: "0.75rem", color: "var(--text-muted)", flexShrink: 0 }}>
-                      {currentVideo.channelName}
-                    </span>
-                  )}
+              {/* ── Video Info Bar ── */}
+              <div className="dlv-info-bar">
+                <div className="dlv-info-top">
+                  <div className="dlv-info-title-row">
+                    <p className="dlv-video-title">{currentVideo.title}</p>
+                    {currentVideo.channelName && (
+                      <span className="dlv-channel-name">{currentVideo.channelName}</span>
+                    )}
+                  </div>
+                  <div className="dlv-info-counter">
+                    {activeVideo + 1} / {videoLinks.length}
+                  </div>
                 </div>
 
-                {/* One row: Prev + Next + Full Screen + toolbar buttons */}
-                <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-                  {activeVideo > 0 && (
-                    <button onClick={prevVideo} style={{
-                      padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)",
-                      background: "var(--surface2)", color: "var(--text)", fontSize: "0.85rem", fontWeight: 600,
-                      cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
-                    }}>
-                      <SkipBack size={14} /> Prev
-                    </button>
-                  )}
-                  {activeVideo < videoLinks.length - 1 && (
-                    <button onClick={skipVideo} style={{
-                      padding: "8px 14px", borderRadius: 8,
-                      background: "linear-gradient(135deg, #ef4444, #dc2626)",
-                      color: "#fff", fontSize: "0.85rem", fontWeight: 600, border: "none",
-                      cursor: "pointer", display: "flex", alignItems: "center", gap: 4,
-                    }}>
-                      <SkipForward size={14} /> Next
-                    </button>
-                  )}
-                  <a href={`https://pclearn.vercel.app/?day=${day}`} target="_blank" rel="noopener noreferrer"
-                    style={{
-                      padding: "8px 14px", borderRadius: 8, border: "1px solid var(--border)",
-                      background: "var(--surface2)", color: "var(--text-muted)", fontSize: "0.85rem", fontWeight: 600,
-                      textDecoration: "none", display: "flex", alignItems: "center", gap: 4,
-                    }}>
-                    <Globe size={14} /> Full Screen
-                  </a>
-                  <div style={{ width: 1, height: 20, background: "var(--border)", flexShrink: 0 }} />
-                  {/* Toolbar toggles */}
-                  {[
-                    { id: "transcript" as const, label: "📄 Transcript", activeColor: "rgba(6,182,212,0.15)", activeBorder: "#06b6d4" },
-                    { id: "ai" as const, label: "🤖 Ask AI", activeColor: "rgba(99,102,241,0.15)", activeBorder: "var(--brand)" },
-                    { id: "quiz" as const, label: "🧪 Quiz", activeColor: "rgba(139,92,246,0.15)", activeBorder: "#8b5cf6" },
-                  ].map(t => (
-                    <button key={t.id} onClick={() => {
-                      const next = bottomTab === t.id ? "none" : t.id;
-                      setBottomTab(next);
-                      if (next === "quiz" && !quiz && !quizLoading) onLoadQuiz();
-                    }} style={{
-                      padding: "8px 14px", borderRadius: 8,
-                      border: `1.5px solid ${bottomTab === t.id ? t.activeBorder : "var(--border)"}`,
-                      background: bottomTab === t.id ? t.activeColor : "var(--surface2)",
-                      color: bottomTab === t.id ? t.activeBorder : "var(--text2)",
-                      fontSize: "0.85rem", fontWeight: 600, cursor: "pointer",
-                      display: "flex", alignItems: "center", gap: 4,
-                    }}>
-                      {t.label}
-                    </button>
-                  ))}
+                {/* ── Controls Row ── */}
+                <div className="dlv-controls-row">
+                  {/* Navigation */}
+                  <div className="dlv-nav-btns">
+                    {activeVideo > 0 && (
+                      <button onClick={prevVideo} className="dlv-nav-btn">
+                        <SkipBack size={15} /> <span>Prev</span>
+                      </button>
+                    )}
+                    {activeVideo < videoLinks.length - 1 && (
+                      <button onClick={skipVideo} className="dlv-nav-btn next">
+                        <span>Next</span> <SkipForward size={15} />
+                      </button>
+                    )}
+                    <a href={`https://pclearn.vercel.app/?day=${day}`} target="_blank" rel="noopener noreferrer"
+                      className="dlv-fullscreen-btn">
+                      <Maximize2 size={14} /> <span>Full Page</span>
+                    </a>
+                  </div>
+
+                  {/* Separator */}
+                  <div className="dlv-divider" />
+
+                  {/* Tab Toggles */}
+                  <div className="dlv-tab-btns">
+                    {[
+                      { id: "transcript" as const, label: "Transcript", emoji: "📄", activeColor: "#06b6d4" },
+                      { id: "ai" as const, label: "Ask AI", emoji: "🤖", activeColor: "var(--brand)" },
+                      { id: "quiz" as const, label: "Quiz", emoji: "🧪", activeColor: "#8b5cf6" },
+                    ].map(t => (
+                      <button key={t.id}
+                        onClick={() => {
+                          const next = bottomTab === t.id ? "none" : t.id;
+                          setBottomTab(next);
+                          if (next === "quiz" && !quiz && !quizLoading) onLoadQuiz();
+                        }}
+                        className={`dlv-tab-btn ${bottomTab === t.id ? "active" : ""}`}
+                        style={bottomTab === t.id ? { "--tab-color": t.activeColor } as React.CSSProperties : {}}>
+                        <span>{t.emoji}</span> <span className="dlv-tab-label">{t.label}</span>
+                        {bottomTab === t.id && <ChevronUp size={13} />}
+                        {bottomTab !== t.id && <ChevronDown size={13} className="dlv-tab-chevron" />}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 
-              {/* ── Bottom Panel (scrollable) ── */}
+              {/* ── Bottom Panel ── */}
               {bottomTab !== "none" && (
-                <div style={{ flex: 1, overflow: "hidden", borderTop: "1px solid var(--border)", background: "var(--bg2)", display: "flex", flexDirection: "column", minHeight: 0 }}>
-                  <div style={{ flex: 1, overflowY: "auto" }}>
+                <div className="dlv-bottom-panel">
+                  <div className="dlv-bottom-scroll">
+
                     {/* Transcript */}
                     {bottomTab === "transcript" && (
-                      <div style={{ padding: "14px 16px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-                          <FileText size={16} style={{ color: "#06b6d4" }} />
-                          <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)" }}>
-                            Transcript — Video {activeVideo + 1}
-                          </span>
+                      <div className="dlv-panel-content">
+                        <div className="dlv-panel-header">
+                          <FileText size={18} style={{ color: "#06b6d4" }} />
+                          <span className="dlv-panel-title">Transcript — Video {activeVideo + 1}</span>
                         </div>
                         {loadingTranscript ? (
-                          <div style={{ textAlign: "center", padding: 20, color: "var(--text-muted)", fontSize: "0.82rem" }}>
-                            <Loader2 size={16} className="spinner" style={{ display: "inline", marginRight: 6 }} /> Loading transcript…
+                          <div className="dlv-panel-loading">
+                            <Loader2 size={18} className="spinner" style={{ color: "var(--brand)" }} />
+                            <span>Loading transcript…</span>
                           </div>
                         ) : currentTranscript ? (
-                          <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>
-                            {currentTranscript}
-                          </p>
+                          <p className="dlv-transcript-text">{currentTranscript}</p>
                         ) : (
-                          <div style={{ textAlign: "center", padding: 20, color: "var(--text-faint)", fontSize: "0.82rem" }}>
-                            No transcript available for this video
-                          </div>
+                          <div className="dlv-panel-empty">No transcript available for this video</div>
                         )}
                       </div>
                     )}
 
                     {/* AI */}
                     {bottomTab === "ai" && (
-                      <div style={{ padding: "14px 16px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 10 }}>
-                          <Brain size={16} style={{ color: "var(--brand)" }} />
-                          <span style={{ fontSize: "0.85rem", fontWeight: 700, color: "var(--text)" }}>AI Tutor</span>
+                      <div className="dlv-panel-content">
+                        <div className="dlv-panel-header">
+                          <Brain size={18} style={{ color: "var(--brand)" }} />
+                          <span className="dlv-panel-title">AI Tutor</span>
+                          <span className="dlv-panel-subtitle">Ask about Day {day}</span>
                         </div>
-                        <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.5 }}>
-                          Ask about this video or Day {day}&apos;s topic
-                        </p>
-                        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <div className="dlv-ai-grid">
                           {[
                             { emoji: "💡", label: "Explain this simply", prompt: `Explain the video "${currentVideo?.title || `Day ${day}`}" in simple terms with examples` },
                             { emoji: "📝", label: "Key points & notes", prompt: `Give me key points and notes from "${currentVideo?.title || `Day ${day}`}"` },
                             { emoji: "❓", label: "Practice questions", prompt: `Create 5 practice questions about "${currentVideo?.title || `Day ${day}`}"` },
                             { emoji: "🔗", label: "Real-life examples", prompt: `Give real-life examples for "${currentVideo?.title || `Day ${day}`}"` },
+                            { emoji: "🚀", label: "What to learn next", prompt: `After watching "${currentVideo?.title || `Day ${day}`}", what should I learn next?` },
+                            { emoji: "🎯", label: "Quick summary", prompt: `Give a 3-sentence summary of "${currentVideo?.title || `Day ${day}`}"` },
                           ].map((item, i) => (
-                            <button key={i} onClick={() => onAskAi(item.prompt)} style={{
-                              display: "flex", alignItems: "center", gap: 10, width: "100%",
-                              padding: "12px 14px", borderRadius: 10, border: "1px solid var(--border)",
-                              background: "var(--surface)", color: "var(--text)", fontSize: "0.85rem",
-                              fontWeight: 500, cursor: "pointer", textAlign: "left",
-                            }}>
-                              <span style={{ fontSize: "1.1rem" }}>{item.emoji}</span> {item.label}
+                            <button key={i} onClick={() => onAskAi(item.prompt)} className="dlv-ai-btn">
+                              <span className="dlv-ai-emoji">{item.emoji}</span>
+                              <span className="dlv-ai-label">{item.label}</span>
                             </button>
                           ))}
                         </div>
@@ -499,7 +460,7 @@ export default function DayLinkView({
 
                     {/* Quiz */}
                     {bottomTab === "quiz" && (
-                      <div style={{ padding: "14px 16px" }}>
+                      <div className="dlv-panel-content">
                         <QuizView quiz={quiz} answers={answers} evalResult={evalResult}
                           onAnswer={onAnswer} onSubmit={onSubmitQuiz} onNextLesson={onNextLesson}
                           isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading} />
@@ -511,120 +472,97 @@ export default function DayLinkView({
             </>
           ) : (
             /* ── No video playing ── */
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: 20 }}>
+            <div className="dlv-no-video">
               {hasVideos ? (
                 <>
-                  <div style={{
-                    width: 60, height: 60, borderRadius: 14, overflow: "hidden", marginBottom: 14,
-                    background: "var(--surface2)", border: "2px solid var(--border)",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    {getThumbnail(videoLinks[0].url) ? (
-                      <img src={getThumbnail(videoLinks[0].url)} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                    ) : <Play size={24} style={{ color: "var(--text-faint)" }} />}
+                  <div className="dlv-no-video-thumb">
+                    {getThumbnailHq(videoLinks[0].url) ? (
+                      <img src={getThumbnailHq(videoLinks[0].url)}
+                        onError={e => { (e.target as HTMLImageElement).src = getThumbnail(videoLinks[0].url); }}
+                        alt="" className="dlv-no-video-img" />
+                    ) : <Play size={40} style={{ color: "var(--text-faint)" }} />}
+                    <div className="dlv-no-video-overlay" />
+                    <div className="dlv-no-video-badge">
+                      {videoLinks.length} video{videoLinks.length > 1 ? "s" : ""}
+                    </div>
                   </div>
-                  <h3 style={{ fontSize: "0.95rem", fontWeight: 700, color: "var(--text)", marginBottom: 4, textAlign: "center" }}>
-                    {dayData?.title || `Day ${day}`}
-                  </h3>
-                  <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 16, textAlign: "center", maxWidth: 300, lineHeight: 1.5 }}>
-                    {dayData?.description || `${videoLinks.length} video${videoLinks.length > 1 ? "s" : ""} to watch`}
-                  </p>
-                  <button onClick={startPlaylist} style={{
-                    padding: "12px 28px", borderRadius: 12,
-                    background: "linear-gradient(135deg, #ef4444, #dc2626)",
-                    color: "#fff", fontSize: "0.95rem", fontWeight: 700,
-                    cursor: "pointer", display: "flex", alignItems: "center", gap: 8,
-                    boxShadow: "0 4px 14px rgba(239,68,68,0.3)", border: "none",
-                  }}>
-                    <Play size={18} fill="#fff" /> Play All ({videoLinks.length} videos)
-                  </button>
+                  <div className="dlv-no-video-info">
+                    <h3 className="dlv-no-video-title">{dayData?.title || `Day ${day}`}</h3>
+                    <p className="dlv-no-video-desc">
+                      {dayData?.description || `Watch all ${videoLinks.length} videos to complete Day ${day}`}
+                    </p>
+                    <button onClick={startPlaylist} className="dlv-play-all-btn">
+                      <Play size={20} fill="#fff" /> Play All {videoLinks.length} Videos
+                    </button>
+                  </div>
                 </>
               ) : (
                 <>
-                  <div style={{ fontSize: "2.5rem", marginBottom: 10 }}>📚</div>
-                  <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text)", marginBottom: 4 }}>No videos yet</p>
-                  <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Ask your teacher to add resources</p>
+                  <div style={{ fontSize: "3rem", marginBottom: 14 }}>📚</div>
+                  <p style={{ fontSize: "1rem", fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>No videos yet</p>
+                  <p style={{ fontSize: "0.85rem", color: "var(--text-muted)" }}>Ask your teacher to add resources</p>
                 </>
               )}
             </div>
           )}
         </div>
 
-        {/* ── Right: Playlist Sidebar ── */}
+        {/* ── Right: Playlist Sidebar ─────────────────────────────────── */}
         {hasVideos && (
-          <div className="playlist-sidebar" style={{
-            width: 280, flexShrink: 0, borderLeft: "1px solid var(--border)",
-            background: "var(--surface)", display: "flex", flexDirection: "column", overflow: "hidden",
-          }}>
+          <div className="dlv-playlist">
             {/* Header */}
-            <div style={{
-              padding: "10px 14px", borderBottom: "1px solid var(--border)",
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-            }}>
-              <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center", gap: 5 }}>
-                <List size={14} /> Playlist
-              </span>
-              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
-                {watchedVideos.size}/{videoLinks.length}
-              </span>
+            <div className="dlv-playlist-header">
+              <div className="dlv-playlist-header-left">
+                <List size={16} className="dlv-playlist-icon" />
+                <span className="dlv-playlist-title">Playlist</span>
+              </div>
+              <div className="dlv-playlist-header-right">
+                <span className="dlv-playlist-count">{watchedVideos.size}/{videoLinks.length}</span>
+                {/* Progress bar */}
+                <div className="dlv-playlist-progress-track">
+                  <div className="dlv-playlist-progress-fill"
+                    style={{ width: `${videoLinks.length ? (watchedVideos.size / videoLinks.length) * 100 : 0}%` }} />
+                </div>
+              </div>
             </div>
 
             {/* Items */}
-            <div style={{ flex: 1, overflowY: "auto" }}>
-              {/* Watched */}
+            <div className="dlv-playlist-body">
+              {/* Watched section */}
               {watchedVideos.size > 0 && (
                 <div>
-                  <div style={{
-                    padding: "5px 14px", fontSize: "0.65rem", fontWeight: 700, color: "#10b981",
-                    textTransform: "uppercase" as const, letterSpacing: "0.05em",
-                    display: "flex", alignItems: "center", gap: 4,
-                  }}>
-                    <CheckCircle2 size={11} /> Watched
+                  <div className="dlv-playlist-section-label watched">
+                    <CheckCircle2 size={12} /> Watched ({watchedVideos.size})
                   </div>
                   {videoLinks.map((link, idx) => {
                     if (!watchedVideos.has(idx)) return null;
                     const thumb = getThumbnail(link.url);
                     return (
-                      <div key={link.id} onClick={() => playVideo(idx)}
-                        style={{
-                        display: "flex", alignItems: "center", gap: 10,
-                        padding: "7px 14px", cursor: "pointer",
-                          borderBottom: "1px solid var(--border)", opacity: 0.6, transition: "opacity 0.15s",
-                        }}
-                        onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
-                        onMouseLeave={e => (e.currentTarget.style.opacity = "0.6")}>
-                        <div style={{
-                          width: 56, height: 40, borderRadius: 6, overflow: "hidden", flexShrink: 0,
-                          position: "relative", background: "var(--surface3)",
-                        }}>
-                          {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-                          <div style={{
-                            position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                            background: "rgba(16,185,129,0.4)",
-                          }}>
-                            <CheckCircle2 size={12} color="#fff" />
+                      <div key={link.id} onClick={() => playVideo(idx)} className="dlv-playlist-item watched">
+                        <div className="dlv-playlist-thumb">
+                          {thumb && <img src={thumb} alt="" className="dlv-playlist-thumb-img" />}
+                          <div className="dlv-playlist-thumb-overlay watched">
+                            <CheckCircle2 size={16} color="#fff" />
                           </div>
                         </div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: "0.78rem", fontWeight: 500, color: "var(--text-muted)", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                            {link.title}
-                          </p>
+                        <div className="dlv-playlist-item-info">
+                          <p className="dlv-playlist-item-title watched">{link.title}</p>
+                          {link.channelName && (
+                            <p className="dlv-playlist-item-channel">{link.channelName}</p>
+                          )}
                         </div>
+                        <span className="dlv-playlist-item-num watched">{idx + 1}</span>
                       </div>
                     );
                   })}
                 </div>
               )}
 
-              {/* Up Next */}
+              {/* Up Next section */}
               <div>
-                {watchedVideos.size > 0 && (
-                  <div style={{
-                    padding: "5px 14px", fontSize: "0.65rem", fontWeight: 700, color: "var(--text-muted)",
-                    textTransform: "uppercase" as const, letterSpacing: "0.05em",
-                    display: "flex", alignItems: "center", gap: 4,
-                  }}>
-                    <Clock size={11} /> Up Next
+                {watchedVideos.size > 0 && videoLinks.some((_, i) => !watchedVideos.has(i)) && (
+                  <div className="dlv-playlist-section-label upcoming">
+                    <Clock size={12} /> Up Next
                   </div>
                 )}
                 {videoLinks.map((link, idx) => {
@@ -633,43 +571,22 @@ export default function DayLinkView({
                   const isPlaying = activeVideo === idx;
                   return (
                     <div key={link.id} onClick={() => playVideo(idx)}
-                      style={{
-                        display: "flex", alignItems: "center", gap: 10,
-                        padding: "7px 14px", cursor: "pointer",
-                        background: isPlaying ? "rgba(239,68,68,0.08)" : "transparent",
-                        borderLeft: isPlaying ? "3px solid #ef4444" : "3px solid transparent",
-                        borderBottom: "1px solid var(--border)", transition: "all 0.15s",
-                      }}
-                      onMouseEnter={e => { if (!isPlaying) e.currentTarget.style.background = "var(--surface2)"; }}
-                      onMouseLeave={e => { if (!isPlaying) e.currentTarget.style.background = "transparent"; }}>
-                      <div style={{
-                        width: 56, height: 40, borderRadius: 6, overflow: "hidden", flexShrink: 0,
-                        position: "relative", background: "var(--surface3)",
-                      }}>
-                        {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
-                        <div style={{
-                          position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-                          background: isPlaying ? "rgba(239,68,68,0.5)" : "rgba(0,0,0,0.3)",
-                        }}>
+                      className={`dlv-playlist-item ${isPlaying ? "playing" : ""}`}>
+                      <div className="dlv-playlist-thumb">
+                        {thumb && <img src={thumb} alt="" className="dlv-playlist-thumb-img" />}
+                        <div className={`dlv-playlist-thumb-overlay ${isPlaying ? "playing" : "default"}`}>
                           {isPlaying
-                            ? <Pause size={12} fill="#fff" color="#fff" />
-                            : <Play size={12} fill="#fff" color="#fff" style={{ marginLeft: 1 }} />}
+                            ? <Pause size={14} fill="#fff" color="#fff" />
+                            : <Play size={14} fill="#fff" color="#fff" style={{ marginLeft: 1 }} />}
                         </div>
                       </div>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{
-                          fontSize: "0.78rem", fontWeight: isPlaying ? 700 : 500,
-                          color: isPlaying ? "var(--text)" : "var(--text2)",
-                          lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                        }}>{link.title}</p>
+                      <div className="dlv-playlist-item-info">
+                        <p className={`dlv-playlist-item-title ${isPlaying ? "playing" : ""}`}>{link.title}</p>
                         {link.channelName && (
-                          <p style={{ fontSize: "0.68rem", color: "var(--text-faint)", marginTop: 2 }}>{link.channelName}</p>
+                          <p className="dlv-playlist-item-channel">{link.channelName}</p>
                         )}
                       </div>
-                      <span style={{
-                        fontSize: "0.72rem", fontWeight: 700, color: isPlaying ? "#ef4444" : "var(--text-faint)",
-                        flexShrink: 0, width: 18, textAlign: "center",
-                      }}>{idx + 1}</span>
+                      <span className={`dlv-playlist-item-num ${isPlaying ? "playing" : ""}`}>{idx + 1}</span>
                     </div>
                   );
                 })}
