@@ -223,10 +223,10 @@ export default function DayLinkView({
 }: Props) {
   const [activeVideo, setActiveVideo] = useState<number>(-1);
   const [watchedVideos, setWatchedVideos] = useState<Set<number>>(new Set());
-  const [bottomTab, setBottomTab] = useState<"transcript" | "ai" | "quiz" | "none">("none");
+  const [rightTab, setRightTab] = useState<"playlist" | "ai" | "quiz">("playlist");
   const [currentTranscript, setCurrentTranscript] = useState("");
   const [loadingTranscript, setLoadingTranscript] = useState(false);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [transcriptOpen, setTranscriptOpen] = useState(false);
 
   const links = dayData?.resources ?? [];
   const videoLinks = links.filter(l => l.type === "youtube");
@@ -250,7 +250,7 @@ export default function DayLinkView({
     if (activeVideo >= 0) {
       setWatchedVideos(prev => new Set([...prev, activeVideo]));
       if (activeVideo < videoLinks.length - 1) setActiveVideo(activeVideo + 1);
-      else { setActiveVideo(-1); setBottomTab("quiz"); onLoadQuiz(); }
+      else { setActiveVideo(-1); setRightTab("quiz"); onLoadQuiz(); }
     }
   }, [videoCloseTrigger]); // eslint-disable-line
 
@@ -269,7 +269,7 @@ export default function DayLinkView({
     if (idx === activeVideo) return;
     if (activeVideo >= 0) setWatchedVideos(prev => new Set([...prev, activeVideo]));
     setActiveVideo(idx);
-    setBottomTab("none");
+    setTranscriptOpen(false);
   }, [activeVideo]);
 
   const startPlaylist = useCallback(() => { setWatchedVideos(new Set()); playVideo(0); }, [playVideo]);
@@ -318,29 +318,10 @@ export default function DayLinkView({
   return (
     <div className="dlv-root">
 
-      {/* ── Day Header ──────────────────────────────────────────────────── */}
-      <div className="dlv-header">
-        <div className="dlv-header-badge">{day}</div>
-        <div className="dlv-header-text">
-          <h2 className="dlv-header-title">{dayData?.title || `Day ${day}`}</h2>
-          {dayData?.description && (
-            <p className="dlv-header-desc">{dayData.description}</p>
-          )}
-        </div>
-        <div className="dlv-header-meta">
-          <span className="dlv-header-pill">
-            🎬 {videoLinks.length} video{videoLinks.length !== 1 ? "s" : ""}
-          </span>
-          <span className="dlv-header-pill">
-            ✅ {watchedVideos.size} watched
-          </span>
-        </div>
-      </div>
-
       {/* ── Main Body ───────────────────────────────────────────────────── */}
       <div className="dlv-body">
 
-        {/* ── Left: Player Area ─────────────────────────────────────────── */}
+        {/* ── Left: Player + Scrollable Content ──────────────────────────── */}
         <div className="dlv-player-area">
 
           {activeVideo >= 0 && currentVideo ? (
@@ -374,7 +355,6 @@ export default function DayLinkView({
 
                 {/* ── Controls Row ── */}
                 <div className="dlv-controls-row">
-                  {/* Navigation */}
                   <div className="dlv-nav-btns">
                     {activeVideo > 0 && (
                       <button onClick={prevVideo} className="dlv-nav-btn">
@@ -392,113 +372,45 @@ export default function DayLinkView({
                     </a>
                   </div>
 
-                  {/* Separator */}
                   <div className="dlv-divider" />
 
-                  {/* Tab Toggles */}
-                  <div className="dlv-tab-btns">
-                    {[
-                      { id: "transcript" as const, label: "Transcript", emoji: "📄", activeColor: "#06b6d4" },
-                      { id: "ai" as const, label: "Ask AI", emoji: "🤖", activeColor: "var(--brand)" },
-                      { id: "quiz" as const, label: "Quiz", emoji: "🧪", activeColor: "#8b5cf6" },
-                    ].map(t => (
-                      <button key={t.id}
-                        onClick={() => {
-                          const next = bottomTab === t.id ? "none" : t.id;
-                          setBottomTab(next);
-                          if (next === "quiz" && !quiz && !quizLoading) onLoadQuiz();
-                        }}
-                        className={`dlv-tab-btn ${bottomTab === t.id ? "active" : ""}`}
-                        style={bottomTab === t.id ? { "--tab-color": t.activeColor } as React.CSSProperties : {}}>
-                        <span>{t.emoji}</span> <span className="dlv-tab-label">{t.label}</span>
-                        {bottomTab === t.id && <ChevronUp size={13} />}
-                        {bottomTab !== t.id && <ChevronDown size={13} className="dlv-tab-chevron" />}
-                      </button>
-                    ))}
-                  </div>
+                  {/* Transcript toggle — inline below video */}
+                  <button
+                    onClick={() => setTranscriptOpen(o => !o)}
+                    className={`dlv-tab-btn ${transcriptOpen ? "active" : ""}`}
+                    style={transcriptOpen ? { "--tab-color": "#06b6d4" } as React.CSSProperties : {}}>
+                    <span>📄</span>
+                    <span className="dlv-tab-label">Transcript</span>
+                    {transcriptOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} className="dlv-tab-chevron" />}
+                  </button>
                 </div>
               </div>
 
-              {/* ── Bottom Panel ── */}
-              {bottomTab !== "none" && (
-                <div className="dlv-bottom-panel">
-                  <div className="dlv-bottom-scroll">
-
-                    {/* Transcript */}
-                    {bottomTab === "transcript" && (
-                      <div className="dlv-panel-content">
-                        <div className="dlv-panel-header">
-                          <FileText size={18} style={{ color: "#06b6d4" }} />
-                          <span className="dlv-panel-title">Transcript — Video {activeVideo + 1}</span>
-                        </div>
-                        {loadingTranscript ? (
-                          <div className="dlv-panel-loading">
-                            <Loader2 size={18} className="spinner" style={{ color: "var(--brand)" }} />
-                            <span>Loading transcript…</span>
-                          </div>
-                        ) : currentTranscript ? (
-                          <p className="dlv-transcript-text">{currentTranscript}</p>
-                        ) : (
-                          <div className="dlv-panel-empty">
-                            <FileText size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
-                            <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text2)", marginBottom: 4 }}>
-                              No transcript available
-                            </p>
-                            <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
-                              This video doesn't have captions enabled.
-                              Try <strong>Ask AI</strong> to get a summary instead.
-                            </p>
-                          </div>
-                        )}
+              {/* ── Transcript (expandable, scrollable below video) ── */}
+              {transcriptOpen && (
+                <div className="dlv-transcript-expand">
+                  <div className="dlv-transcript-inner">
+                    <div className="dlv-panel-header">
+                      <FileText size={18} style={{ color: "#06b6d4" }} />
+                      <span className="dlv-panel-title">Transcript — Video {activeVideo + 1}</span>
+                    </div>
+                    {loadingTranscript ? (
+                      <div className="dlv-panel-loading">
+                        <Loader2 size={18} className="spinner" style={{ color: "var(--brand)" }} />
+                        <span>Loading transcript…</span>
                       </div>
-                    )}
-
-                    {/* AI — Inline ChatPanel */}
-                    {bottomTab === "ai" && (
-                      <div className="dlv-ai-inline">
-                        {onSendChat ? (
-                          <ChatPanel
-                            compact
-                            chatHistory={chatHistory}
-                            learner={learner}
-                            onSendMessage={onSendChat}
-                            onClearHistory={onClearHistory || (() => {})}
-                            onModelChange={onModelChange || (() => {})}
-                            isLoading={chatLoading}
-                          />
-                        ) : (
-                          <div className="dlv-panel-content">
-                            <div className="dlv-panel-header">
-                              <Brain size={18} style={{ color: "var(--brand)" }} />
-                              <span className="dlv-panel-title">AI Tutor</span>
-                              <span className="dlv-panel-subtitle">Ask about Day {day}</span>
-                            </div>
-                            <div className="dlv-ai-grid">
-                              {[
-                                { emoji: "💡", label: "Explain this simply", prompt: `Explain the video "${currentVideo?.title || `Day ${day}`}" in simple terms with examples` },
-                                { emoji: "📝", label: "Key points & notes", prompt: `Give me key points and notes from "${currentVideo?.title || `Day ${day}`}"` },
-                                { emoji: "❓", label: "Practice questions", prompt: `Create 5 practice questions about "${currentVideo?.title || `Day ${day}`}"` },
-                                { emoji: "🔗", label: "Real-life examples", prompt: `Give real-life examples for "${currentVideo?.title || `Day ${day}`}"` },
-                                { emoji: "🚀", label: "What to learn next", prompt: `After watching "${currentVideo?.title || `Day ${day}`}", what should I learn next?` },
-                                { emoji: "🎯", label: "Quick summary", prompt: `Give a 3-sentence summary of "${currentVideo?.title || `Day ${day}`}"` },
-                              ].map((item, i) => (
-                                <button key={i} onClick={() => onAskAi(item.prompt)} className="dlv-ai-btn">
-                                  <span className="dlv-ai-emoji">{item.emoji}</span>
-                                  <span className="dlv-ai-label">{item.label}</span>
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Quiz */}
-                    {bottomTab === "quiz" && (
-                      <div className="dlv-panel-content">
-                        <QuizView quiz={quiz} answers={answers} evalResult={evalResult}
-                          onAnswer={onAnswer} onSubmit={onSubmitQuiz} onNextLesson={onNextLesson}
-                          isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading} />
+                    ) : currentTranscript ? (
+                      <p className="dlv-transcript-text">{currentTranscript}</p>
+                    ) : (
+                      <div className="dlv-panel-empty">
+                        <FileText size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+                        <p style={{ fontSize: "0.95rem", fontWeight: 600, color: "var(--text2)", marginBottom: 4 }}>
+                          No transcript available
+                        </p>
+                        <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
+                          This video doesn't have captions enabled.
+                          Try <strong>Ask AI</strong> in the sidebar to get a summary.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -542,91 +454,154 @@ export default function DayLinkView({
           )}
         </div>
 
-        {/* ── Right: Playlist Sidebar ─────────────────────────────────── */}
+        {/* ── Right: Sidebar (Playlist / AI / Quiz) ─────────────────────── */}
         {hasVideos && (
-          <div className="dlv-playlist">
-            {/* Header */}
-            <div className="dlv-playlist-header">
-              <div className="dlv-playlist-header-left">
-                <List size={16} className="dlv-playlist-icon" />
-                <span className="dlv-playlist-title">Playlist</span>
-              </div>
-              <div className="dlv-playlist-header-right">
-                <span className="dlv-playlist-count">{watchedVideos.size}/{videoLinks.length}</span>
-                {/* Progress bar */}
-                <div className="dlv-playlist-progress-track">
-                  <div className="dlv-playlist-progress-fill"
-                    style={{ width: `${videoLinks.length ? (watchedVideos.size / videoLinks.length) * 100 : 0}%` }} />
-                </div>
-              </div>
+          <div className="dlv-sidebar">
+            {/* Sidebar Tab Bar */}
+            <div className="dlv-sidebar-tabs">
+              <button
+                onClick={() => setRightTab("playlist")}
+                className={`dlv-sidebar-tab ${rightTab === "playlist" ? "active" : ""}`}>
+                <List size={14} /> <span>Playlist</span>
+              </button>
+              <button
+                onClick={() => setRightTab("ai")}
+                className={`dlv-sidebar-tab ${rightTab === "ai" ? "active" : ""}`}>
+                <Brain size={14} /> <span>AI</span>
+              </button>
+              <button
+                onClick={() => {
+                  setRightTab("quiz");
+                  if (!quiz && !quizLoading) onLoadQuiz();
+                }}
+                className={`dlv-sidebar-tab ${rightTab === "quiz" ? "active" : ""}`}>
+                <Target size={14} /> <span>Quiz</span>
+              </button>
             </div>
 
-            {/* Items */}
-            <div className="dlv-playlist-body">
-              {/* Watched section */}
-              {watchedVideos.size > 0 && (
-                <div>
-                  <div className="dlv-playlist-section-label watched">
-                    <CheckCircle2 size={12} /> Watched ({watchedVideos.size})
+            {/* ── Playlist Panel ── */}
+            {rightTab === "playlist" && (
+              <div className="dlv-playlist">
+                {/* Progress */}
+                <div className="dlv-playlist-progress">
+                  <span className="dlv-playlist-count">{watchedVideos.size}/{videoLinks.length} watched</span>
+                  <div className="dlv-playlist-progress-track">
+                    <div className="dlv-playlist-progress-fill"
+                      style={{ width: `${videoLinks.length ? (watchedVideos.size / videoLinks.length) * 100 : 0}%` }} />
                   </div>
-                  {videoLinks.map((link, idx) => {
-                    if (!watchedVideos.has(idx)) return null;
-                    const thumb = getThumbnail(link.url);
-                    return (
-                      <div key={link.id} onClick={() => playVideo(idx)} className="dlv-playlist-item watched">
-                        <div className="dlv-playlist-thumb">
-                          {thumb && <img src={thumb} alt="" className="dlv-playlist-thumb-img" />}
-                          <div className="dlv-playlist-thumb-overlay watched">
-                            <CheckCircle2 size={16} color="#fff" />
-                          </div>
-                        </div>
-                        <div className="dlv-playlist-item-info">
-                          <p className="dlv-playlist-item-title watched">{link.title}</p>
-                          {link.channelName && (
-                            <p className="dlv-playlist-item-channel">{link.channelName}</p>
-                          )}
-                        </div>
-                        <span className="dlv-playlist-item-num watched">{idx + 1}</span>
-                      </div>
-                    );
-                  })}
                 </div>
-              )}
 
-              {/* Up Next section */}
-              <div>
-                {watchedVideos.size > 0 && videoLinks.some((_, i) => !watchedVideos.has(i)) && (
-                  <div className="dlv-playlist-section-label upcoming">
-                    <Clock size={12} /> Up Next
+                {/* Items */}
+                <div className="dlv-playlist-body">
+                  {watchedVideos.size > 0 && (
+                    <div>
+                      <div className="dlv-playlist-section-label watched">
+                        <CheckCircle2 size={12} /> Watched ({watchedVideos.size})
+                      </div>
+                      {videoLinks.map((link, idx) => {
+                        if (!watchedVideos.has(idx)) return null;
+                        const thumb = getThumbnail(link.url);
+                        return (
+                          <div key={link.id} onClick={() => playVideo(idx)} className="dlv-playlist-item watched">
+                            <div className="dlv-playlist-thumb">
+                              {thumb && <img src={thumb} alt="" className="dlv-playlist-thumb-img" />}
+                              <div className="dlv-playlist-thumb-overlay watched">
+                                <CheckCircle2 size={16} color="#fff" />
+                              </div>
+                            </div>
+                            <div className="dlv-playlist-item-info">
+                              <p className="dlv-playlist-item-title watched">{link.title}</p>
+                              {link.channelName && (
+                                <p className="dlv-playlist-item-channel">{link.channelName}</p>
+                              )}
+                            </div>
+                            <span className="dlv-playlist-item-num watched">{idx + 1}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Up Next */}
+                  <div>
+                    {watchedVideos.size > 0 && videoLinks.some((_, i) => !watchedVideos.has(i)) && (
+                      <div className="dlv-playlist-section-label upcoming">
+                        <Clock size={12} /> Up Next
+                      </div>
+                    )}
+                    {videoLinks.map((link, idx) => {
+                      if (watchedVideos.has(idx)) return null;
+                      const thumb = getThumbnail(link.url);
+                      const isPlaying = activeVideo === idx;
+                      return (
+                        <div key={link.id} onClick={() => playVideo(idx)}
+                          className={`dlv-playlist-item ${isPlaying ? "playing" : ""}`}>
+                          <div className="dlv-playlist-thumb">
+                            {thumb && <img src={thumb} alt="" className="dlv-playlist-thumb-img" />}
+                            <div className={`dlv-playlist-thumb-overlay ${isPlaying ? "playing" : ""}`}>
+                              {isPlaying
+                                ? <Pause size={16} fill="#fff" color="#fff" />
+                                : <Play size={16} fill="#fff" color="#fff" style={{ marginLeft: 1 }} />}
+                            </div>
+                          </div>
+                          <div className="dlv-playlist-item-info">
+                            <p className={`dlv-playlist-item-title ${isPlaying ? "playing" : ""}`}>{link.title}</p>
+                            {link.channelName && (
+                              <p className="dlv-playlist-item-channel">{link.channelName}</p>
+                            )}
+                          </div>
+                          <span className={`dlv-playlist-item-num ${isPlaying ? "playing" : ""}`}>{idx + 1}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── AI Chat Panel (fills sidebar) ── */}
+            {rightTab === "ai" && (
+              <div className="dlv-sidebar-panel">
+                {onSendChat ? (
+                  <ChatPanel
+                    chatHistory={chatHistory}
+                    learner={learner}
+                    onSendMessage={onSendChat}
+                    onClearHistory={onClearHistory || (() => {})}
+                    onModelChange={onModelChange || (() => {})}
+                    isLoading={chatLoading}
+                  />
+                ) : (
+                  <div className="dlv-sidebar-empty">
+                    <Brain size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+                    <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text2)", marginBottom: 4 }}>AI Tutor</p>
+                    <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Ask about Day {day}</p>
+                    <div className="dlv-ai-quick-grid">
+                      {[
+                        { emoji: "💡", label: "Explain simply", prompt: `Explain the video "${currentVideo?.title || `Day ${day}`}" in simple terms` },
+                        { emoji: "📝", label: "Key points", prompt: `Give me key points from "${currentVideo?.title || `Day ${day}`}"` },
+                        { emoji: "❓", label: "Quiz me", prompt: `Create 5 practice questions about "${currentVideo?.title || `Day ${day}`}"` },
+                        { emoji: "🎯", label: "Summary", prompt: `Give a 3-sentence summary of "${currentVideo?.title || `Day ${day}`}"` },
+                      ].map((item, i) => (
+                        <button key={i} onClick={() => onAskAi(item.prompt)} className="dlv-ai-quick-btn">
+                          <span className="dlv-ai-quick-emoji">{item.emoji}</span>
+                          <span className="dlv-ai-quick-label">{item.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
-                {videoLinks.map((link, idx) => {
-                  if (watchedVideos.has(idx)) return null;
-                  const thumb = getThumbnail(link.url);
-                  const isPlaying = activeVideo === idx;
-                  return (
-                    <div key={link.id} onClick={() => playVideo(idx)}
-                      className={`dlv-playlist-item ${isPlaying ? "playing" : ""}`}>
-                      <div className="dlv-playlist-thumb">
-                        {thumb && <img src={thumb} alt="" className="dlv-playlist-thumb-img" />}
-                        <div className={`dlv-playlist-thumb-overlay ${isPlaying ? "playing" : "default"}`}>
-                          {isPlaying
-                            ? <Pause size={14} fill="#fff" color="#fff" />
-                            : <Play size={14} fill="#fff" color="#fff" style={{ marginLeft: 1 }} />}
-                        </div>
-                      </div>
-                      <div className="dlv-playlist-item-info">
-                        <p className={`dlv-playlist-item-title ${isPlaying ? "playing" : ""}`}>{link.title}</p>
-                        {link.channelName && (
-                          <p className="dlv-playlist-item-channel">{link.channelName}</p>
-                        )}
-                      </div>
-                      <span className={`dlv-playlist-item-num ${isPlaying ? "playing" : ""}`}>{idx + 1}</span>
-                    </div>
-                  );
-                })}
               </div>
-            </div>
+            )}
+
+            {/* ── Quiz Panel (fills sidebar) ── */}
+            {rightTab === "quiz" && (
+              <div className="dlv-sidebar-panel">
+                <QuizView quiz={quiz} answers={answers} evalResult={evalResult}
+                  onAnswer={onAnswer} onSubmit={onSubmitQuiz} onNextLesson={onNextLesson}
+                  isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading} />
+              </div>
+            )}
           </div>
         )}
       </div>
