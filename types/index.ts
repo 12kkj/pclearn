@@ -452,6 +452,7 @@ export interface TutorApiRequest {
   query?: string;
   question?: string;
   transcript?: string;
+  videoTranscript?: string;
   currentTime?: number;
   // admin content management
   dayContent?: AdminDayContent;

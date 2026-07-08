@@ -64,32 +64,40 @@ function getThumbnailHq(url: string): string {
   return id ? `https://img.youtube.com/vi/${id}/maxresdefault.jpg` : "";
 }
 
-// ─── Transcript Cache ─────────────────────────────────────────────────────────
-const TRANSCRIPT_KEY = "csa_transcripts";
-function getTranscriptCache(): Record<string, string> {
+// ─── Transcript (via Cloudflare Worker proxy) ───────────────────────────────
+const CF_TRANSCRIPT_API = "https://flat-bird-6bd4.koush3069.workers.dev/api/transcript";
+const TRANSCRIPT_KEY = "csa_transcripts_v2";
+interface TranscriptCache { text: string; segments?: Array<{ text: string; start: number; duration: number; formattedStart: string }> }
+function getTranscriptCache(): Record<string, TranscriptCache> {
   if (typeof window === "undefined") return {};
   try { return JSON.parse(localStorage.getItem(TRANSCRIPT_KEY) || "{}"); } catch { return {}; }
 }
-function saveTranscriptCache(cache: Record<string, string>) {
+function saveTranscriptCache(cache: Record<string, TranscriptCache>) {
   try { localStorage.setItem(TRANSCRIPT_KEY, JSON.stringify(cache)); } catch {}
 }
-async function fetchTranscript(videoId: string): Promise<string> {
+async function fetchTranscript(videoId: string): Promise<TranscriptCache> {
   const cached = getTranscriptCache()[videoId];
   if (cached) return cached;
-  try {
-    const tryUrl = (kind?: string) =>
-      `https://www.youtube.com/api/timedtext?lang=en&v=${videoId}${kind ? `&kind=${kind}` : ""}&fmt=json3`;
-    let res = await fetch(tryUrl());
-    if (!res.ok) res = await fetch(tryUrl("asr"));
-    if (!res.ok) return "";
-    const data = await res.json();
-    const text = (data.events || [])
-      .filter((e: any) => e.segs)
-      .map((e: any) => e.segs.map((s: any) => s.utf8).join(""))
-      .join(" ").replace(/\s+/g, " ").trim();
-    if (text) { const c = getTranscriptCache(); c[videoId] = text; saveTranscriptCache(c); }
-    return text;
-  } catch { return ""; }
+  const langs = ["en", "hi", ""];
+  for (const lang of langs) {
+    try {
+      const params = new URLSearchParams({ url: `https://www.youtube.com/watch?v=${videoId}` });
+      if (lang) params.set("lang", lang);
+      const res = await fetch(`${CF_TRANSCRIPT_API}?${params.toString()}`, {
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const segments: any[] = data.segments ?? [];
+      if (segments.length > 0) {
+        const text = segments.map((s: any) => s.text).join(" ").replace(/\s+/g, " ").trim();
+        const result: TranscriptCache = { text, segments };
+        if (text) { const c = getTranscriptCache(); c[videoId] = result; saveTranscriptCache(c); }
+        return result;
+      }
+    } catch { /* try next lang */ }
+  }
+  return { text: "" };
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -225,6 +233,7 @@ export default function DayLinkView({
   const [watchedVideos, setWatchedVideos] = useState<Set<number>>(new Set());
   const [rightTab, setRightTab] = useState<"playlist" | "ai" | "quiz">("playlist");
   const [currentTranscript, setCurrentTranscript] = useState("");
+  const [videoTranscriptFull, setVideoTranscriptFull] = useState("");
   const [loadingTranscript, setLoadingTranscript] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
   const [chatKey, setChatKey] = useState(0);
@@ -281,15 +290,22 @@ export default function DayLinkView({
     }
   }, [videoCloseTrigger]); // eslint-disable-line
 
-  // Load transcript
+  // Load transcript via Cloudflare Worker
   useEffect(() => {
     if (activeVideo >= 0 && videoLinks[activeVideo]) {
       const vid = getVideoId(videoLinks[activeVideo].url);
       if (vid) {
         setLoadingTranscript(true);
-        fetchTranscript(vid).then(t => { setCurrentTranscript(t); setLoadingTranscript(false); });
+        fetchTranscript(vid).then(result => {
+          setCurrentTranscript(result.text);
+          setVideoTranscriptFull(result.text);
+          setLoadingTranscript(false);
+        });
       }
-    } else { setCurrentTranscript(""); }
+    } else {
+      setCurrentTranscript("");
+      setVideoTranscriptFull("");
+    }
   }, [activeVideo]); // eslint-disable-line
 
   const playVideo = useCallback((idx: number) => {
@@ -603,7 +619,12 @@ export default function DayLinkView({
                     key={chatKey}
                     chatHistory={chatHistory}
                     learner={learner}
-                    onSendMessage={onSendChat}
+                    onSendMessage={async (msg, modelId) => {
+                      const contextMsg = videoTranscriptFull
+                        ? `[Video Transcript context for "${currentVideo?.title || "current video"}"]: ${videoTranscriptFull.slice(0, 4000)}\n\nStudent question: ${msg}`
+                        : msg;
+                      await onSendChat(contextMsg, modelId);
+                    }}
                     onClearHistory={onClearHistory || (() => {})}
                     onModelChange={onModelChange || (() => {})}
                     isLoading={chatLoading}
