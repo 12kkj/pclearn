@@ -227,6 +227,7 @@ export default function DayLinkView({
   const [currentTranscript, setCurrentTranscript] = useState("");
   const [loadingTranscript, setLoadingTranscript] = useState(false);
   const [transcriptOpen, setTranscriptOpen] = useState(false);
+  const [chatKey, setChatKey] = useState(0);
 
   const links = dayData?.resources ?? [];
   const videoLinks = links.filter(l => l.type === "youtube");
@@ -270,7 +271,9 @@ export default function DayLinkView({
     if (activeVideo >= 0) setWatchedVideos(prev => new Set([...prev, activeVideo]));
     setActiveVideo(idx);
     setTranscriptOpen(false);
-  }, [activeVideo]);
+    setChatKey(k => k + 1);
+    if (onClearHistory) onClearHistory();
+  }, [activeVideo, onClearHistory]);
 
   const startPlaylist = useCallback(() => { setWatchedVideos(new Set()); playVideo(0); }, [playVideo]);
   const skipVideo = useCallback(() => { if (activeVideo < videoLinks.length - 1) playVideo(activeVideo + 1); }, [activeVideo, videoLinks.length, playVideo]);
@@ -564,6 +567,7 @@ export default function DayLinkView({
               <div className="dlv-sidebar-panel">
                 {onSendChat ? (
                   <ChatPanel
+                    key={chatKey}
                     chatHistory={chatHistory}
                     learner={learner}
                     onSendMessage={onSendChat}

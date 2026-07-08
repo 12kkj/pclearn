@@ -593,6 +593,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  height: 100%;
 }
 .dlv-sidebar-tabs {
   display: flex;
@@ -639,6 +640,100 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   flex-direction: column;
   overflow: hidden;
   min-height: 0;
+}
+
+/* ── AI Chat inside sidebar — smaller text for readability ── */
+.dlv-sidebar-panel .chat-bubble-user,
+.dlv-sidebar-panel .chat-bubble-ai {
+  font-size: 0.75rem;
+  line-height: 1.5;
+  padding: 7px 10px;
+  max-width: 95%;
+}
+.dlv-sidebar-panel .chat-message-text {
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+.dlv-sidebar-panel .chat-message-text p {
+  margin: 0;
+  font-size: 0.75rem;
+}
+.dlv-sidebar-panel .chat-message-text pre {
+  font-size: 0.7rem;
+  padding: 6px 8px;
+  overflow-x: auto;
+}
+.dlv-sidebar-panel .chat-message-text code {
+  font-size: 0.7rem;
+}
+.dlv-sidebar-panel .chat-message-text ul,
+.dlv-sidebar-panel .chat-message-text ol {
+  padding-left: 16px;
+  margin: 4px 0;
+}
+.dlv-sidebar-panel .chat-message-text li {
+  font-size: 0.75rem;
+  margin: 2px 0;
+}
+.dlv-sidebar-panel .chat-message-text h1,
+.dlv-sidebar-panel .chat-message-text h2,
+.dlv-sidebar-panel .chat-message-text h3 {
+  font-size: 0.8rem;
+  margin: 4px 0 2px;
+}
+.dlv-sidebar-panel .chat-input-composer {
+  padding: 6px 8px;
+  font-size: 0.78rem;
+}
+.dlv-sidebar-panel .chat-input-field {
+  font-size: 0.78rem;
+  padding: 7px 10px;
+}
+.dlv-sidebar-panel .chat-model-select {
+  font-size: 0.7rem;
+}
+.dlv-sidebar-panel .chat-message-row {
+  gap: 6px;
+}
+.dlv-sidebar-panel .chat-avatar {
+  width: 22px;
+  height: 22px;
+}
+.dlv-sidebar-panel .chat-message-header {
+  font-size: 0.7rem;
+}
+.dlv-sidebar-panel .chat-message-footer {
+  font-size: 0.65rem;
+  gap: 4px;
+}
+.dlv-sidebar-panel .chat-welcome-title {
+  font-size: 0.85rem;
+}
+.dlv-sidebar-panel .chat-welcome-sub {
+  font-size: 0.72rem;
+}
+.dlv-sidebar-panel .chat-suggestion-chip {
+  font-size: 0.7rem;
+  padding: 5px 8px;
+}
+
+/* ── Quiz inside sidebar — scrollable ── */
+.dlv-sidebar-panel .dlv-quiz-content {
+  overflow-y: auto;
+  flex: 1;
+}
+.dlv-sidebar-panel .dlv-question-card {
+  padding: 10px 12px;
+}
+.dlv-sidebar-panel .dlv-question-text {
+  font-size: 0.78rem;
+}
+.dlv-sidebar-panel .dlv-option-btn {
+  font-size: 0.75rem;
+  padding: 6px 10px;
+}
+.dlv-sidebar-panel .dlv-result-score {
+  font-size: 0.82rem;
 }
 .dlv-sidebar-empty {
   display: flex;
@@ -746,9 +841,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
    DLV Playlist Sidebar
    ══════════════════════════════════════════════════════════════════ */
 .dlv-playlist {
-  width: 340px;
-  flex-shrink: 0;
-  border-left: 1px solid var(--border);
+  flex: 1;
+  min-height: 0;
   background: var(--surface);
   display: flex;
   flex-direction: column;
@@ -1116,14 +1210,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 /* Large screens: playlist wider */
 @media (min-width: 1280px) {
-  .dlv-playlist { width: 380px; }
   .dlv-playlist-item-title { font-size: 0.88rem; }
   .dlv-playlist-thumb { width: 88px; height: 62px; }
 }
 
 /* Medium: reduce playlist */
 @media (max-width: 1100px) and (min-width: 769px) {
-  .dlv-playlist { width: 300px; }
   .dlv-playlist-thumb { width: 72px; height: 50px; }
   .dlv-playlist-item { padding: 9px 12px; }
   .dlv-playlist-item.playing { padding-left: 9px; }
