@@ -267,7 +267,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .lesson-main { min-width: 0; }
 .lesson-sidebar { min-width: 0; }
 .lesson-context-card { padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow-sm); }
-.main-content-shell { padding-bottom: 72px; }
+.main-content-shell { padding-bottom: 0; }
 .app-shell { width: 100%; max-width: 1180px; margin: 0 auto; }
 .hero-card { padding: 22px 24px; border: none; color: #fff; }
 .hero-card-content { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
