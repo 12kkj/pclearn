@@ -264,6 +264,7 @@ export default function DayLinkView({
   const [currentVideoTime, setCurrentVideoTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
   const playerRef = useRef<any>(null);
+  const ytPlayerRef = useRef<any>(null);
   const timeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(380);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
@@ -327,49 +328,73 @@ export default function DayLinkView({
     document.head.appendChild(tag);
   }, []);
 
-  // Track video playback time via YouTube IFrame API
+  // Initialize YT.Player when video changes
   useEffect(() => {
     if (!currentVideoId || activeVideo < 0) {
       if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
+      if (ytPlayerRef.current) { try { ytPlayerRef.current.destroy(); } catch {} ytPlayerRef.current = null; }
       setCurrentVideoTime(0);
       setVideoDuration(0);
       return;
     }
-    // Wait for iframe to load, then poll time
-    const timer = setTimeout(() => {
-      const iframe = document.querySelector(".dlv-iframe") as HTMLIFrameElement;
-      if (!iframe) return;
-      // Use postMessage API to get time
-      const pollTime = () => {
-        try {
-          iframe.contentWindow?.postMessage(JSON.stringify({ event: "listening", id: currentVideoId }), "*");
-        } catch { /* cross-origin ok */ }
-      };
-      pollTime();
-      timeIntervalRef.current = setInterval(pollTime, 3000);
-    }, 2000);
+
+    const containerEl = playerRef.current;
+    if (!containerEl) return;
+
+    const initPlayer = () => {
+      // Destroy old player
+      if (ytPlayerRef.current) { try { ytPlayerRef.current.destroy(); } catch {} ytPlayerRef.current = null; }
+      if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
+
+      const YT = (window as any).YT;
+      if (!YT || !YT.Player) {
+        setTimeout(initPlayer, 500);
+        return;
+      }
+
+      const player = new YT.Player(containerEl, {
+        videoId: currentVideoId,
+        playerVars: { autoplay: 1, rel: 0, modestbranding: 1 },
+        events: {
+          onReady: () => {
+            try {
+              const dur = player.getDuration();
+              if (dur > 0) setVideoDuration(dur);
+            } catch {}
+          },
+          onStateChange: (e: any) => {
+            const YT2 = (window as any).YT;
+            if (e.data === YT2?.PlayerState?.PLAYING) {
+              if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
+              timeIntervalRef.current = setInterval(() => {
+                try {
+                  const t = player.getCurrentTime();
+                  const d = player.getDuration();
+                  if (typeof t === "number" && t >= 0) setCurrentVideoTime(t);
+                  if (typeof d === "number" && d > 0) setVideoDuration(d);
+                } catch {}
+              }, 2000);
+            } else {
+              if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
+              try {
+                const t = player.getCurrentTime();
+                if (typeof t === "number" && t >= 0) setCurrentVideoTime(t);
+              } catch {}
+            }
+          },
+        },
+      });
+      ytPlayerRef.current = player;
+    };
+
+    const timer = setTimeout(initPlayer, 300);
+
     return () => {
       clearTimeout(timer);
       if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
+      if (ytPlayerRef.current) { try { ytPlayerRef.current.destroy(); } catch {} ytPlayerRef.current = null; }
     };
   }, [currentVideoId, activeVideo]);
-
-  // Listen for YouTube player state messages
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      try {
-        const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data;
-        if (data.info && typeof data.info.currentTime === "number") {
-          setCurrentVideoTime(data.info.currentTime);
-        }
-        if (data.info && typeof data.info.duration === "number") {
-          setVideoDuration(data.info.duration);
-        }
-      } catch { /* ignore */ }
-    };
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
-  }, []);
 
   // Load transcript via Cloudflare Worker + pre-fetch next video
   useEffect(() => {
@@ -513,13 +538,7 @@ export default function DayLinkView({
               {/* ── Video Player ── */}
               <div className="dlv-video-wrap">
                 <div className="dlv-video-ratio">
-                  <iframe
-                    src={`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&rel=0&modestbranding=1`}
-                    title={currentVideo.title}
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                    allowFullScreen
-                    className="dlv-iframe"
-                  />
+                  <div ref={playerRef} style={{ position: "absolute", inset: 0, width: "100%", height: "100%" }} />
                 </div>
               </div>
 
