@@ -77,14 +77,16 @@ function saveTranscriptCache(cache: Record<string, TranscriptCache>) {
 }
 async function fetchTranscript(videoId: string): Promise<TranscriptCache> {
   const cached = getTranscriptCache()[videoId];
-  if (cached) return cached;
+  if (cached && cached.text) return cached;
+
+  // Try Cloudflare Worker first
   const langs = ["en", "hi", ""];
   for (const lang of langs) {
     try {
       const params = new URLSearchParams({ url: `https://www.youtube.com/watch?v=${videoId}` });
       if (lang) params.set("lang", lang);
       const res = await fetch(`${CF_TRANSCRIPT_API}?${params.toString()}`, {
-        signal: AbortSignal.timeout(15000),
+        signal: AbortSignal.timeout(12000),
       });
       if (!res.ok) continue;
       const data = await res.json();
@@ -97,6 +99,27 @@ async function fetchTranscript(videoId: string): Promise<TranscriptCache> {
       }
     } catch { /* try next lang */ }
   }
+
+  // Fallback: YouTube direct timedtext API (may fail due to CORS in browser)
+  try {
+    const tryUrl = (kind?: string) =>
+      `https://www.youtube.com/api/timedtext?lang=en&v=${videoId}${kind ? `&kind=${kind}` : ""}&fmt=json3`;
+    let res = await fetch(tryUrl());
+    if (!res.ok) res = await fetch(tryUrl("asr"));
+    if (res.ok) {
+      const data = await res.json();
+      const text = (data.events || [])
+        .filter((e: any) => e.segs)
+        .map((e: any) => e.segs.map((s: any) => s.utf8).join(""))
+        .join(" ").replace(/\s+/g, " ").trim();
+      if (text) {
+        const result: TranscriptCache = { text };
+        const c = getTranscriptCache(); c[videoId] = result; saveTranscriptCache(c);
+        return result;
+      }
+    }
+  } catch { /* CORS blocked in browser, ok */ }
+
   return { text: "" };
 }
 
@@ -348,7 +371,7 @@ export default function DayLinkView({
     return () => window.removeEventListener("message", handler);
   }, []);
 
-  // Load transcript via Cloudflare Worker
+  // Load transcript via Cloudflare Worker + pre-fetch next video
   useEffect(() => {
     if (activeVideo >= 0 && videoLinks[activeVideo]) {
       const vid = getVideoId(videoLinks[activeVideo].url);
@@ -360,6 +383,17 @@ export default function DayLinkView({
           setVideoTranscriptSegments(result.segments || []);
           setLoadingTranscript(false);
         });
+      }
+      // Pre-fetch next video transcript in background
+      const nextIdx = activeVideo + 1;
+      if (nextIdx < videoLinks.length) {
+        const nextVid = getVideoId(videoLinks[nextIdx].url);
+        if (nextVid) {
+          const cached = getTranscriptCache()[nextVid];
+          if (!cached || !cached.text) {
+            fetchTranscript(nextVid); // fire-and-forget, populates cache
+          }
+        }
       }
     } else {
       setCurrentTranscript("");
@@ -739,14 +773,36 @@ export default function DayLinkView({
                   <div className="dlv-sidebar-empty">
                     <Brain size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
                     <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text2)", marginBottom: 4 }}>AI Tutor</p>
-                    <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Ask about Day {day}</p>
+                    <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: 10 }}>
+                      {currentVideo ? (
+                        <>Watching: <strong>{currentVideo.title}</strong>{currentVideoTime > 0 ? ` at ${Math.floor(currentVideoTime / 60)}:${String(Math.floor(currentVideoTime % 60)).padStart(2, "0")}` : ""}</>
+                      ) : (
+                        <>Ask about Day {day}</>
+                      )}
+                    </p>
                     <div className="dlv-ai-quick-grid">
-                      {[
-                        { emoji: "💡", label: "Explain simply", prompt: `Explain the video "${currentVideo?.title || `Day ${day}`}" in simple terms` },
-                        { emoji: "📝", label: "Key points", prompt: `Give me key points from "${currentVideo?.title || `Day ${day}`}"` },
-                        { emoji: "❓", label: "Quiz me", prompt: `Create 5 practice questions about "${currentVideo?.title || `Day ${day}`}"` },
-                        { emoji: "🎯", label: "Summary", prompt: `Give a 3-sentence summary of "${currentVideo?.title || `Day ${day}`}"` },
-                      ].map((item, i) => (
+                      {(() => {
+                        const timeLabel = currentVideoTime > 0 ? ` at ${Math.floor(currentVideoTime / 60)}:${String(Math.floor(currentVideoTime % 60)).padStart(2, "0")}` : "";
+                        const vidTitle = currentVideo?.title || `Day ${day}`;
+                        const segContext = videoTranscriptSegments.length > 0
+                          ? (() => {
+                              let closest = 0, minD = Infinity;
+                              for (let i = 0; i < videoTranscriptSegments.length; i++) {
+                                const d = Math.abs(videoTranscriptSegments[i].start - currentVideoTime);
+                                if (d < minD) { minD = d; closest = i; }
+                              }
+                              const s = Math.max(0, closest - 1);
+                              const e = Math.min(videoTranscriptSegments.length - 1, closest + 1);
+                              return videoTranscriptSegments.slice(s, e + 1).map(x => `[${x.formattedStart}] ${x.text}`).join(" ");
+                            })()
+                          : "";
+                        return [
+                          { emoji: "💡", label: "Explain simply", prompt: `Explain what the video "${vidTitle}" is teaching${timeLabel} in simple terms${segContext ? `\n\nContext: ${segContext}` : ""}` },
+                          { emoji: "📝", label: "Key points", prompt: `What are the key points from "${vidTitle}"${timeLabel}?${segContext ? `\n\nContext: ${segContext}` : ""}` },
+                          { emoji: "❓", label: "Quiz me", prompt: `Create 3 practice questions about "${vidTitle}"${timeLabel}${segContext ? `\n\nBased on: ${segContext}` : ""}` },
+                          { emoji: "🎯", label: "Summary", prompt: `Give a 2-sentence summary of what's being discussed in "${vidTitle}"${timeLabel}${segContext ? `\n\nContext: ${segContext}` : ""}` },
+                        ];
+                      })().map((item, i) => (
                         <button key={i} onClick={() => onAskAi(item.prompt)} className="dlv-ai-quick-btn">
                           <span className="dlv-ai-quick-emoji">{item.emoji}</span>
                           <span className="dlv-ai-quick-label">{item.label}</span>

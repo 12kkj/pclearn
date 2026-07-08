@@ -11,6 +11,7 @@ export const MODELS = {
   NEMOTRON_ULTRA: "nvidia/nemotron-3-ultra-550b-a55b",
   NEMOTRON_SUPER: "nvidia/nemotron-3-super-120b-a12b",
   GPT_OSS_120B: "openai/gpt-oss-120b",
+  GPT_OSS_20B: "openai/gpt-oss-20b",
   MINIMAX_M3: "minimaxai/minimax-m3",
   STEP_3_7_FLASH: "stepfun-ai/step-3.7-flash",
   MIMO_V25: "mimo-v2.5-free",
@@ -23,6 +24,7 @@ export const MODEL_PROVIDER: Record<ModelId, Provider> = {
   ["nvidia/nemotron-3-ultra-550b-a55b"]: "nvidia",
   ["nvidia/nemotron-3-super-120b-a12b"]: "nvidia",
   ["openai/gpt-oss-120b"]: "nvidia",
+  ["openai/gpt-oss-20b"]: "nvidia",
   ["minimaxai/minimax-m3"]: "nvidia",
   ["stepfun-ai/step-3.7-flash"]: "nvidia",
   ["mimo-v2.5-free"]: "mimo",
@@ -77,6 +79,15 @@ export const MODEL_INFO: Record<
     strengths: ["chat", "instruction following", "mentoring"],
     speed: "medium",
     badge: "Default Chat",
+  },
+  [MODELS.GPT_OSS_20B]: {
+    name: "GPT-OSS 20B",
+    description: "20B lightweight LLM · Fast responses · Chat & tutoring",
+    contextWindow: "128K tokens",
+    knowledgeCutoff: "Unknown",
+    strengths: ["fast chat", "tutoring", "quick answers", "suggestions"],
+    speed: "fast",
+    badge: "Fastest",
   },
   [MODELS.MINIMAX_M3]: {
     name: "MiniMax M3",
@@ -159,6 +170,12 @@ export const MODEL_PARAMS: Record<
     max_tokens: 4096,
     // No thinking toggle — model reasons by default, extract reasoning_content
   },
+  // 20B lightweight · fast responses for chat and suggestions
+  [MODELS.GPT_OSS_20B]: {
+    temperature: 0.7,
+    top_p: 0.95,
+    max_tokens: 2048,
+  },
   // Multimodal MoE · thinking_mode DISABLED per official sample
   [MODELS.MINIMAX_M3]: {
     temperature: 1,
@@ -184,10 +201,11 @@ export const MODEL_PARAMS: Record<
 /** All models available for user chat selection */
 export const CHAT_SELECTABLE_MODELS: ModelId[] = [
   MODELS.GPT_OSS_120B,
+  MODELS.GPT_OSS_20B,
+  MODELS.STEP_3_7_FLASH,
   MODELS.QWEN_3_5_122B,
   MODELS.NEMOTRON_ULTRA,
   MODELS.NEMOTRON_SUPER,
   MODELS.MINIMAX_M3,
-  MODELS.STEP_3_7_FLASH,
   MODELS.MIMO_V25,
 ];
