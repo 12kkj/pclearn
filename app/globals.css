@@ -375,13 +375,17 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: #000;
   flex-shrink: 0;
   width: 100%;
-  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
 }
 .dlv-video-ratio {
   position: relative;
+  /* width: 100% up to the 16:9 equivalent of 56vh */
   width: 100%;
+  max-width: calc(56vh * 16 / 9);   /* ~1074px on 1080p — keeps 16:9 within height cap */
+  max-height: 56vh;                  /* hard cap: always leaves room for info bar + tabs */
   aspect-ratio: 16/9;
-  max-height: calc(100vh - 200px);
   overflow: hidden;
 }
 .dlv-iframe {
@@ -440,8 +444,11 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.dlv-controls-row::-webkit-scrollbar { display: none; }
 .dlv-nav-btns {
   display: flex;
   gap: 6px;
@@ -478,7 +485,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: var(--border); flex-shrink: 0;
 }
 .dlv-tab-btns {
-  display: flex; gap: 6px; flex-wrap: wrap;
+  display: flex; gap: 6px; flex-wrap: nowrap;
 }
 .dlv-tab-btn {
   display: flex; align-items: center; gap: 5px;
