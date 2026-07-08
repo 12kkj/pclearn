@@ -444,11 +444,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  scrollbar-width: none;
+  flex-wrap: wrap;
 }
-.dlv-controls-row::-webkit-scrollbar { display: none; }
 .dlv-nav-btns {
   display: flex;
   gap: 6px;
@@ -485,7 +482,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: var(--border); flex-shrink: 0;
 }
 .dlv-tab-btns {
-  display: flex; gap: 6px; flex-wrap: nowrap;
+  display: flex; gap: 6px; flex-wrap: wrap;
 }
 .dlv-tab-btn {
   display: flex; align-items: center; gap: 5px;
