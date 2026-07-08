@@ -381,10 +381,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .dlv-video-ratio {
   position: relative;
-  /* width: 100% up to the 16:9 equivalent of 56vh */
   width: 100%;
-  max-width: calc(56vh * 16 / 9);   /* ~1074px on 1080p — keeps 16:9 within height cap */
-  max-height: 56vh;                  /* hard cap: always leaves room for info bar + tabs */
+  max-width: calc(42vh * 16 / 9);   /* ~800px on 1080p */
+  max-height: 42vh;                  /* leaves room for controls + bottom panel */
   aspect-ratio: 16/9;
   overflow: hidden;
 }
@@ -443,22 +442,25 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .dlv-controls-row {
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+.dlv-controls-row::-webkit-scrollbar { display: none; }
 .dlv-nav-btns {
   display: flex;
   gap: 6px;
   align-items: center;
 }
 .dlv-nav-btn {
-  display: flex; align-items: center; gap: 5px;
-  padding: 7px 13px; border-radius: 8px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 10px; border-radius: 7px;
   border: 1.5px solid var(--border);
   background: var(--surface2); color: var(--text);
-  font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
   transition: all 0.15s ease; font-family: inherit;
-  white-space: nowrap;
+  white-space: nowrap; flex-shrink: 0;
 }
 .dlv-nav-btn:hover { background: var(--surface3); border-color: var(--border2); }
 .dlv-nav-btn.next {
@@ -468,12 +470,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 }
 .dlv-nav-btn.next:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(239,68,68,0.4); }
 .dlv-fullscreen-btn {
-  display: flex; align-items: center; gap: 5px;
-  padding: 7px 13px; border-radius: 8px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 10px; border-radius: 7px;
   border: 1.5px solid var(--border);
   background: var(--surface2); color: var(--text-muted);
-  font-size: 0.82rem; font-weight: 600;
-  text-decoration: none; white-space: nowrap;
+  font-size: 0.78rem; font-weight: 600;
+  text-decoration: none; white-space: nowrap; flex-shrink: 0;
   transition: all 0.15s ease;
 }
 .dlv-fullscreen-btn:hover { background: var(--surface3); color: var(--text); }
@@ -482,16 +484,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   background: var(--border); flex-shrink: 0;
 }
 .dlv-tab-btns {
-  display: flex; gap: 6px; flex-wrap: wrap;
+  display: flex; gap: 5px; flex-wrap: nowrap; flex-shrink: 0;
 }
 .dlv-tab-btn {
-  display: flex; align-items: center; gap: 5px;
-  padding: 7px 13px; border-radius: 8px;
+  display: flex; align-items: center; gap: 4px;
+  padding: 5px 10px; border-radius: 7px;
   border: 1.5px solid var(--border);
   background: var(--surface2); color: var(--text2);
-  font-size: 0.82rem; font-weight: 600; cursor: pointer;
+  font-size: 0.78rem; font-weight: 600; cursor: pointer;
   transition: all 0.15s ease; font-family: inherit;
-  white-space: nowrap;
+  white-space: nowrap; flex-shrink: 0;
 }
 .dlv-tab-btn:hover { background: var(--surface3); color: var(--text); }
 .dlv-tab-btn.active {
@@ -504,13 +506,13 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 
 /* ── Bottom Panel ── */
 .dlv-bottom-panel {
-  flex: 1;
+  flex: 1 1 250px;
   overflow: hidden;
   border-top: 1px solid var(--border);
   background: var(--bg2);
   display: flex;
   flex-direction: column;
-  min-height: 0;
+  min-height: 200px;
 }
 .dlv-bottom-scroll {
   flex: 1;
@@ -1049,7 +1051,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .dlv-playlist-item-title { font-size: 0.82rem; -webkit-line-clamp: 1; }
   .dlv-tab-label { display: none; }
   .dlv-fullscreen-btn span { display: none; }
-  .dlv-video-ratio { max-height: 56vw; }
+  .dlv-video-ratio { max-height: 42vw; }
   .dlv-no-video { padding: 20px 16px; }
   .dlv-no-video-thumb { max-width: 100%; }
   .dlv-play-all-btn { padding: 12px 22px; font-size: 0.9rem; }
@@ -1058,9 +1060,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .dlv-header { padding: 8px 12px; min-height: 46px; }
   .dlv-header-badge { width: 30px; height: 30px; font-size: 0.78rem; border-radius: 8px; }
   .dlv-header-title { font-size: 0.86rem; }
-  .dlv-controls-row { gap: 6px; }
-  .dlv-nav-btn { padding: 6px 10px; font-size: 0.78rem; }
-  .dlv-tab-btn { padding: 6px 10px; font-size: 0.78rem; }
+  .dlv-controls-row { gap: 5px; }
+  .dlv-nav-btn { padding: 5px 8px; font-size: 0.75rem; }
+  .dlv-tab-btn { padding: 5px 8px; font-size: 0.75rem; }
 }
 
 /* Small mobile */
@@ -1072,7 +1074,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   .dlv-playlist-item-channel { display: none; }
   .dlv-ai-btn { padding: 11px 12px; }
   .dlv-ai-label { font-size: 0.78rem; }
-  .dlv-controls-row { flex-wrap: wrap; gap: 5px; }
+  .dlv-controls-row { flex-wrap: wrap; gap: 4px; }
   .dlv-divider { display: none; }
   .dlv-tab-btns { flex-wrap: nowrap; overflow-x: auto; }
 }
