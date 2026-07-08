@@ -587,15 +587,6 @@ export default function DayLinkView({
                     <span className="dlv-tab-label">Transcript</span>
                     {transcriptOpen ? <ChevronUp size={13} /> : <ChevronDown size={13} className="dlv-tab-chevron" />}
                   </button>
-
-                  {hasVideos && (
-                    <button
-                      onClick={() => setSidebarOpen(o => !o)}
-                      className="dlv-tab-btn"
-                      title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}>
-                      {sidebarOpen ? <PanelRightClose size={14} /> : <PanelRightOpen size={14} />}
-                    </button>
-                  )}
                 </div>
               </div>
 
@@ -696,6 +687,14 @@ export default function DayLinkView({
                 }}
                 className={`dlv-sidebar-tab ${rightTab === "quiz" ? "active" : ""}`}>
                 <Target size={14} /> <span>Quiz</span>
+              </button>
+              <div style={{ flex: 1 }} />
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="dlv-sidebar-tab"
+                title="Hide sidebar"
+                style={{ marginLeft: "auto" }}>
+                <PanelRightClose size={14} />
               </button>
             </div>
 
@@ -852,6 +851,16 @@ export default function DayLinkView({
               </div>
             )}
           </div>
+        )}
+
+        {/* ── Floating show-sidebar button (when hidden) ── */}
+        {hasVideos && !sidebarOpen && (
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="dlv-show-sidebar-btn"
+            title="Show sidebar">
+            <PanelRightOpen size={16} />
+          </button>
         )}
       </div>
     </div>
