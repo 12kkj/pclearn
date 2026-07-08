@@ -324,7 +324,7 @@ export default function DayLinkView({
       {/* ── Main Body ───────────────────────────────────────────────────── */}
       <div className="dlv-body">
 
-        {/* ── Left: Player + Scrollable Content ──────────────────────────── */}
+        {/* ── Video + Controls ───────────────────────────────────────────── */}
         <div className="dlv-player-area">
 
           {activeVideo >= 0 && currentVideo ? (
@@ -412,7 +412,7 @@ export default function DayLinkView({
                         </p>
                         <p style={{ fontSize: "0.82rem", color: "var(--text-muted)", lineHeight: 1.5 }}>
                           This video doesn't have captions enabled.
-                          Try <strong>Ask AI</strong> in the sidebar to get a summary.
+                          Try the <strong>AI</strong> tab below to get a summary.
                         </p>
                       </div>
                     )}
@@ -457,19 +457,20 @@ export default function DayLinkView({
           )}
         </div>
 
-        {/* ── Right: Sidebar (Playlist / AI / Quiz) ─────────────────────── */}
+        {/* ── Bottom Tabs (Playlist / AI / Quiz) ──────────────────────────── */}
         {hasVideos && (
-          <div className="dlv-sidebar">
-            {/* Sidebar Tab Bar */}
-            <div className="dlv-sidebar-tabs">
+          <>
+            {/* Tab bar */}
+            <div className="dlv-bottom-tabs">
               <button
                 onClick={() => setRightTab("playlist")}
-                className={`dlv-sidebar-tab ${rightTab === "playlist" ? "active" : ""}`}>
+                className={`dlv-bottom-tab ${rightTab === "playlist" ? "active" : ""}`}>
                 <List size={14} /> <span>Playlist</span>
+                <span className="dlv-bottom-tab-badge">{watchedVideos.size}/{videoLinks.length}</span>
               </button>
               <button
                 onClick={() => setRightTab("ai")}
-                className={`dlv-sidebar-tab ${rightTab === "ai" ? "active" : ""}`}>
+                className={`dlv-bottom-tab ${rightTab === "ai" ? "active" : ""}`}>
                 <Brain size={14} /> <span>AI</span>
               </button>
               <button
@@ -477,136 +478,106 @@ export default function DayLinkView({
                   setRightTab("quiz");
                   if (!quiz && !quizLoading) onLoadQuiz();
                 }}
-                className={`dlv-sidebar-tab ${rightTab === "quiz" ? "active" : ""}`}>
+                className={`dlv-bottom-tab ${rightTab === "quiz" ? "active" : ""}`}>
                 <Target size={14} /> <span>Quiz</span>
               </button>
             </div>
 
-            {/* ── Playlist Panel ── */}
-            {rightTab === "playlist" && (
-              <div className="dlv-playlist">
-                {/* Progress */}
-                <div className="dlv-playlist-progress">
-                  <span className="dlv-playlist-count">{watchedVideos.size}/{videoLinks.length} watched</span>
-                  <div className="dlv-playlist-progress-track">
-                    <div className="dlv-playlist-progress-fill"
-                      style={{ width: `${videoLinks.length ? (watchedVideos.size / videoLinks.length) * 100 : 0}%` }} />
-                  </div>
-                </div>
+            {/* Panel content */}
+            <div className="dlv-bottom-panel">
 
-                {/* Items */}
-                <div className="dlv-playlist-body">
-                  {watchedVideos.size > 0 && (
-                    <div>
-                      <div className="dlv-playlist-section-label watched">
-                        <CheckCircle2 size={12} /> Watched ({watchedVideos.size})
-                      </div>
-                      {videoLinks.map((link, idx) => {
-                        if (!watchedVideos.has(idx)) return null;
-                        const thumb = getThumbnail(link.url);
-                        return (
-                          <div key={link.id} onClick={() => playVideo(idx)} className="dlv-playlist-item watched">
-                            <div className="dlv-playlist-thumb">
-                              {thumb && <img src={thumb} alt="" className="dlv-playlist-thumb-img" />}
-                              <div className="dlv-playlist-thumb-overlay watched">
-                                <CheckCircle2 size={16} color="#fff" />
-                              </div>
-                            </div>
-                            <div className="dlv-playlist-item-info">
-                              <p className="dlv-playlist-item-title watched">{link.title}</p>
-                              {link.channelName && (
-                                <p className="dlv-playlist-item-channel">{link.channelName}</p>
-                              )}
-                            </div>
-                            <span className="dlv-playlist-item-num watched">{idx + 1}</span>
-                          </div>
-                        );
-                      })}
+              {/* ── Playlist Panel ── */}
+              {rightTab === "playlist" && (
+                <div className="dlv-playlist-full">
+                  {/* Progress */}
+                  <div className="dlv-playlist-progress">
+                    <span className="dlv-playlist-count">{watchedVideos.size}/{videoLinks.length} watched</span>
+                    <div className="dlv-playlist-progress-track">
+                      <div className="dlv-playlist-progress-fill"
+                        style={{ width: `${videoLinks.length ? (watchedVideos.size / videoLinks.length) * 100 : 0}%` }} />
                     </div>
-                  )}
+                  </div>
 
-                  {/* Up Next */}
-                  <div>
-                    {watchedVideos.size > 0 && videoLinks.some((_, i) => !watchedVideos.has(i)) && (
-                      <div className="dlv-playlist-section-label upcoming">
-                        <Clock size={12} /> Up Next
-                      </div>
-                    )}
+                  {/* Items grid */}
+                  <div className="dlv-playlist-grid">
                     {videoLinks.map((link, idx) => {
-                      if (watchedVideos.has(idx)) return null;
                       const thumb = getThumbnail(link.url);
+                      const isWatched = watchedVideos.has(idx);
                       const isPlaying = activeVideo === idx;
                       return (
                         <div key={link.id} onClick={() => playVideo(idx)}
-                          className={`dlv-playlist-item ${isPlaying ? "playing" : ""}`}>
-                          <div className="dlv-playlist-thumb">
-                            {thumb && <img src={thumb} alt="" className="dlv-playlist-thumb-img" />}
-                            <div className={`dlv-playlist-thumb-overlay ${isPlaying ? "playing" : ""}`}>
+                          className={`dlv-playlist-card ${isPlaying ? "playing" : ""} ${isWatched ? "watched" : ""}`}>
+                          <div className="dlv-playlist-card-thumb">
+                            {thumb && <img src={thumb} alt="" className="dlv-playlist-card-img" />}
+                            <div className="dlv-playlist-card-overlay">
                               {isPlaying
-                                ? <Pause size={16} fill="#fff" color="#fff" />
-                                : <Play size={16} fill="#fff" color="#fff" style={{ marginLeft: 1 }} />}
+                                ? <Pause size={20} fill="#fff" color="#fff" />
+                                : isWatched
+                                  ? <CheckCircle2 size={20} color="#fff" />
+                                  : <Play size={20} fill="#fff" color="#fff" style={{ marginLeft: 2 }} />}
                             </div>
+                            <span className="dlv-playlist-card-num">{idx + 1}</span>
+                            {isWatched && <div className="dlv-playlist-card-check">✓</div>}
                           </div>
-                          <div className="dlv-playlist-item-info">
-                            <p className={`dlv-playlist-item-title ${isPlaying ? "playing" : ""}`}>{link.title}</p>
+                          <div className="dlv-playlist-card-info">
+                            <p className="dlv-playlist-card-title">{link.title}</p>
                             {link.channelName && (
-                              <p className="dlv-playlist-item-channel">{link.channelName}</p>
+                              <p className="dlv-playlist-card-channel">{link.channelName}</p>
                             )}
                           </div>
-                          <span className={`dlv-playlist-item-num ${isPlaying ? "playing" : ""}`}>{idx + 1}</span>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* ── AI Chat Panel (fills sidebar) ── */}
-            {rightTab === "ai" && (
-              <div className="dlv-sidebar-panel">
-                {onSendChat ? (
-                  <ChatPanel
-                    key={chatKey}
-                    chatHistory={chatHistory}
-                    learner={learner}
-                    onSendMessage={onSendChat}
-                    onClearHistory={onClearHistory || (() => {})}
-                    onModelChange={onModelChange || (() => {})}
-                    isLoading={chatLoading}
-                  />
-                ) : (
-                  <div className="dlv-sidebar-empty">
-                    <Brain size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
-                    <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text2)", marginBottom: 4 }}>AI Tutor</p>
-                    <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Ask about Day {day}</p>
-                    <div className="dlv-ai-quick-grid">
-                      {[
-                        { emoji: "💡", label: "Explain simply", prompt: `Explain the video "${currentVideo?.title || `Day ${day}`}" in simple terms` },
-                        { emoji: "📝", label: "Key points", prompt: `Give me key points from "${currentVideo?.title || `Day ${day}`}"` },
-                        { emoji: "❓", label: "Quiz me", prompt: `Create 5 practice questions about "${currentVideo?.title || `Day ${day}`}"` },
-                        { emoji: "🎯", label: "Summary", prompt: `Give a 3-sentence summary of "${currentVideo?.title || `Day ${day}`}"` },
-                      ].map((item, i) => (
-                        <button key={i} onClick={() => onAskAi(item.prompt)} className="dlv-ai-quick-btn">
-                          <span className="dlv-ai-quick-emoji">{item.emoji}</span>
-                          <span className="dlv-ai-quick-label">{item.label}</span>
-                        </button>
-                      ))}
+              {/* ── AI Chat Panel ── */}
+              {rightTab === "ai" && (
+                <div className="dlv-bottom-panel-inner">
+                  {onSendChat ? (
+                    <ChatPanel
+                      key={chatKey}
+                      chatHistory={chatHistory}
+                      learner={learner}
+                      onSendMessage={onSendChat}
+                      onClearHistory={onClearHistory || (() => {})}
+                      onModelChange={onModelChange || (() => {})}
+                      isLoading={chatLoading}
+                    />
+                  ) : (
+                    <div className="dlv-sidebar-empty">
+                      <Brain size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
+                      <p style={{ fontSize: "0.9rem", fontWeight: 600, color: "var(--text2)", marginBottom: 4 }}>AI Tutor</p>
+                      <p style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>Ask about Day {day}</p>
+                      <div className="dlv-ai-quick-grid">
+                        {[
+                          { emoji: "💡", label: "Explain simply", prompt: `Explain the video "${currentVideo?.title || `Day ${day}`}" in simple terms` },
+                          { emoji: "📝", label: "Key points", prompt: `Give me key points from "${currentVideo?.title || `Day ${day}`}"` },
+                          { emoji: "❓", label: "Quiz me", prompt: `Create 5 practice questions about "${currentVideo?.title || `Day ${day}`}"` },
+                          { emoji: "🎯", label: "Summary", prompt: `Give a 3-sentence summary of "${currentVideo?.title || `Day ${day}`}"` },
+                        ].map((item, i) => (
+                          <button key={i} onClick={() => onAskAi(item.prompt)} className="dlv-ai-quick-btn">
+                            <span className="dlv-ai-quick-emoji">{item.emoji}</span>
+                            <span className="dlv-ai-quick-label">{item.label}</span>
+                          </button>
+                        ))}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              )}
 
-            {/* ── Quiz Panel (fills sidebar) ── */}
-            {rightTab === "quiz" && (
-              <div className="dlv-sidebar-panel">
-                <QuizView quiz={quiz} answers={answers} evalResult={evalResult}
-                  onAnswer={onAnswer} onSubmit={onSubmitQuiz} onNextLesson={onNextLesson}
-                  isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading} />
-              </div>
-            )}
-          </div>
+              {/* ── Quiz Panel ── */}
+              {rightTab === "quiz" && (
+                <div className="dlv-bottom-panel-inner">
+                  <QuizView quiz={quiz} answers={answers} evalResult={evalResult}
+                    onAnswer={onAnswer} onSubmit={onSubmitQuiz} onNextLesson={onNextLesson}
+                    isSubmitting={isSubmitting} day={day} onLoadQuiz={onLoadQuiz} quizLoading={quizLoading} />
+                </div>
+              )}
+            </div>
+          </>
         )}
       </div>
     </div>
