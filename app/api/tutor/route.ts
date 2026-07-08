@@ -41,6 +41,7 @@ export async function POST(req: NextRequest) {
     if (action === "admin_auto_fill_link") return await handleAdminAutoFillLink(body);
     if (action === "admin_generate_full_curriculum") return await handleAdminGenerateFullCurriculum(body);
     if (action === "admin_test_model") return await handleAdminTestModel(body);
+    if (action === "admin_journey_next") return await handleAdminJourneyNext(body);
 
     return NextResponse.json({ error: "Invalid action" }, { status: 400 });
   } catch (error: unknown) {
@@ -824,16 +825,12 @@ async function handleVideoJumpTo(body: TutorApiRequest) {
 async function handleAdminAction(body: TutorApiRequest) {
   const { studentId, adminAction } = body as TutorApiRequest & {
     studentId?: string;
-    adminAction?: "view_student" | "view_all" | "analytics";
+    adminAction?: string;
   };
 
   if (!adminAction) {
     return NextResponse.json({ error: "adminAction is required" }, { status: 400 });
   }
-
-  // Admin actions are processed locally — no AI call needed.
-  // The actual data is in localStorage on the client side.
-  // This endpoint just validates and provides admin-specific context.
 
   if (adminAction === "view_student") {
     return NextResponse.json({
@@ -842,17 +839,25 @@ async function handleAdminAction(body: TutorApiRequest) {
       adminCapabilities: [
         "View any student's progress, scores, and weak areas",
         "View quiz results and analytics",
-        "Cannot modify student data (read-only)",
+        "Modify student progress (set day, reset)",
       ],
     });
   }
 
   if (adminAction === "view_all") {
+    // Return known student IDs — actual data loaded client-side from Firestore
     return NextResponse.json({
       mode: "admin",
-      message: "Viewing all students. Admin mode active for 1 hour.",
-      students: ["st_1", "st_2"],
+      students: [
+        { id: "st_1", name: "Student 1" },
+        { id: "st_2", name: "Student 2" },
+      ],
     });
+  }
+
+  if (adminAction === "set_student_day" || adminAction === "reset_student") {
+    // These are handled client-side via Firebase SDK
+    return NextResponse.json({ ok: true, note: "Client-side action" });
   }
 
   return NextResponse.json({ error: "Unknown admin action" }, { status: 400 });
@@ -1228,6 +1233,100 @@ async function handleAdminTestModel(body: TutorApiRequest) {
       modelId,
       error: msg,
       latencyMs,
+    });
+  }
+}
+
+// ── AI JOURNEY NEXT STEP ─────────────────────────────────────────────────
+// Analyzes student's actual progress and recommends the next learning steps.
+// Uses AI to create a personalized path based on what they've DONE, not a fixed syllabus.
+
+async function handleAdminJourneyNext(body: TutorApiRequest) {
+  const { studentProfile } = body;
+  if (!studentProfile) {
+    return NextResponse.json({ error: "studentProfile required" }, { status: 400 });
+  }
+
+  const profile = studentProfile as any;
+  const completedDays = profile.completedDays ?? [];
+  const testScores = profile.testScores ?? {};
+  const weakTopics = profile.weakTopics ?? [];
+  const currentDay = profile.currentDay ?? 1;
+
+  // Gather context about what the student has learned
+  const completedTopics: string[] = [];
+  const daySummaries: string[] = [];
+  for (const day of completedDays) {
+    const meta = getLessonByDay(day);
+    if (meta) {
+      completedTopics.push(...meta.topics);
+      const score = testScores[day];
+      daySummaries.push(`Day ${day}: "${meta.title}" (${meta.topics.join(", ")})${score !== undefined ? ` — Score: ${score}%` : " — No quiz taken"}`);
+    }
+  }
+
+  const prompt = `You are an AI learning advisor for "Computer Skills Academy." Analyze this student's ACTUAL progress and recommend what they should learn next. Do NOT follow a fixed syllabus — create a personalized path based on what they've actually completed and how they performed.
+
+STUDENT PROFILE:
+- Name: ${profile.name || "Student"}
+- Level: ${profile.profile || "beginner"}
+- Current Day: ${currentDay}
+- XP: ${profile.xp ?? 0} | Streak: ${profile.streak ?? 0} days
+- Completed Days: ${completedDays.length} total
+
+COMPLETED LESSONS:
+${daySummaries.length > 0 ? daySummaries.join("\n") : "None yet — fresh student"}
+
+WEAK TOPICS (from wrong quiz answers):
+${weakTopics.length > 0 ? weakTopics.join(", ") : "None identified yet"}
+
+TEST SCORES: ${Object.entries(testScores).map(([d, s]) => `Day ${d}: ${s}%`).join(", ") || "No scores"}
+
+TASK:
+1. Analyze gaps in their knowledge (topics not yet covered)
+2. Identify weak areas that need reinforcement
+3. Suggest the NEXT 3-5 learning steps with priorities
+4. Consider their pace (how many days completed vs total time)
+5. If they're struggling (low scores), recommend review before new topics
+6. If they're excelling (high scores), suggest harder/challenge material
+
+Return ONLY valid JSON:
+{
+  "recommendation": "A 2-3 sentence personalized message about where they are and what to focus on",
+  "nextSteps": [
+    {
+      "day": <day number>,
+      "title": "<topic/title to learn>",
+      "reason": "<why this specific topic based on their progress>",
+      "priority": "high" | "medium" | "low"
+    }
+  ]
+}
+
+IMPORTANT: The day numbers in nextSteps should be the ACTUAL next logical topics they need, based on gaps in their knowledge. If they skipped basics, recommend going back. If they're advanced, skip ahead. Be specific and actionable.`;
+
+  try {
+    const raw = await runCompletion({
+      model: MODELS.MIMO_V25,
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.6,
+      maxTokens: 2000,
+      jsonMode: true,
+    });
+
+    const parsed = JSON.parse(raw);
+    return NextResponse.json({
+      recommendation: parsed.recommendation ?? "",
+      nextSteps: parsed.nextSteps ?? [],
+    });
+  } catch (err: any) {
+    console.error("[Journey] AI failed:", err?.message);
+    // Fallback: suggest the next sequential day
+    const nextDay = Math.max(...completedDays, 0) + 1;
+    const meta = getLessonByDay(nextDay);
+    return NextResponse.json({
+      recommendation: `Continue your learning journey! You've completed ${completedDays.length} days so far.`,
+      nextSteps: [{ day: nextDay, title: meta?.title ?? `Day ${nextDay}`, reason: "Next in sequence", priority: "high" }],
     });
   }
 }

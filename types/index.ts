@@ -424,7 +424,8 @@ export type TutorAction =
   | "admin_delete_day"
   | "admin_auto_fill_link"
   | "admin_generate_full_curriculum"
-  | "admin_test_model";
+  | "admin_test_model"
+  | "admin_journey_next";
 
 export interface TutorApiRequest {
   action: TutorAction;
@@ -446,7 +447,7 @@ export interface TutorApiRequest {
   techCategory?: string;
   // admin
   studentId?: StudentId;
-  adminAction?: "view_student" | "view_all" | "analytics";
+  adminAction?: "view_student" | "view_all" | "analytics" | "set_student_day" | "reset_student";
   // video player
   segments?: Array<{ text: string; start: number; duration: number; formattedStart: string }>;
   query?: string;
@@ -467,6 +468,8 @@ export interface TutorApiRequest {
   // admin model test
   modelName?: string;
   model?: string;
+  // admin journey
+  studentProfile?: Record<string, unknown>;
 }
 
 export interface QuizQuestion {

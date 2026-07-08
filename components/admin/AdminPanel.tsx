@@ -7,7 +7,7 @@ import {
   Sparkles, BookOpen, Brain, Link2, Download, Upload,
   Shield, Edit3, Save, X, Search,
   ArrowUp, ArrowDown, MessageSquare, TestTube2, Route, Layers,
-  Tag, Cloud, CloudOff, RefreshCw, Users, BarChart3,
+  Tag, Cloud, CloudOff, RefreshCw, Users, BarChart3, RotateCcw,
 } from "lucide-react";
 import type {
   AdminDayContent, AdminResourceLink, AdminCurriculumState,
@@ -495,6 +495,9 @@ function DayContentEditor({ day, existing, curriculum, onSave, onClose }: {
 // ── Phase Manager ─────────────────────────────────────────────────────────
 function PhaseManager({ curriculum, onPhasesChange }: { curriculum: AdminCurriculumState; onPhasesChange: (p: AdminPhase[]) => void }) {
   const [showAdd, setShowAdd] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [newDayNum, setNewDayNum] = useState<Record<number, string>>({});
   const [name, setName] = useState(""); const [icon, setIcon] = useState("📚");
   const [desc, setDesc] = useState(""); const [color, setColor] = useState("#6366f1");
 
@@ -505,6 +508,17 @@ function PhaseManager({ curriculum, onPhasesChange }: { curriculum: AdminCurricu
     setName(""); setDesc(""); setShowAdd(false);
   };
 
+  const handleEdit = () => {
+    if (!name.trim() || editingId === null) return;
+    onPhasesChange(curriculum.phases.map(p => p.id === editingId ? { ...p, name: name.trim(), icon, description: desc.trim(), color, updatedAt: new Date().toISOString() } : p));
+    setName(""); setDesc(""); setEditingId(null);
+  };
+
+  const startEdit = (phase: AdminPhase) => {
+    setEditingId(phase.id); setShowAdd(false);
+    setName(phase.name); setIcon(phase.icon); setDesc(phase.description ?? ""); setColor(phase.color ?? "#6366f1");
+  };
+
   const handleMove = (id: number, dir: "up" | "down") => {
     const sorted = [...curriculum.phases].sort((a, b) => a.order - b.order);
     const idx = sorted.findIndex(p => p.id === id);
@@ -513,43 +527,266 @@ function PhaseManager({ curriculum, onPhasesChange }: { curriculum: AdminCurricu
     onPhasesChange(sorted);
   };
 
+  const handleAddDayToPhase = (phaseId: number) => {
+    const num = parseInt(newDayNum[phaseId] ?? "", 10);
+    if (!num || num < 1) return;
+    onPhasesChange(curriculum.phases.map(p => p.id === phaseId ? { ...p, dayIds: [...(p.dayIds ?? []).filter(d => d !== num), num].sort((a, b) => a - b), updatedAt: new Date().toISOString() } : p));
+    setNewDayNum(prev => ({ ...prev, [phaseId]: "" }));
+  };
+
+  const handleRemoveDayFromPhase = (phaseId: number, dayNum: number) => {
+    onPhasesChange(curriculum.phases.map(p => p.id === phaseId ? { ...p, dayIds: (p.dayIds ?? []).filter(d => d !== dayNum), updatedAt: new Date().toISOString() } : p));
+  };
+
+  const renderForm = (onSubmit: () => void, submitLabel: string, onCancel: () => void) => (
+    <div style={{ padding: 16, borderRadius: 12, border: "1.5px solid var(--brand)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 10 }}>
+      <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)" }}>{editingId !== null ? "Edit Phase" : "Add New Phase"}</p>
+      <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 8 }}>
+        <input className="input-field" placeholder="📚" value={icon} onChange={e => setIcon(e.target.value)} style={{ textAlign: "center" }} />
+        <input className="input-field" placeholder="Phase name" value={name} onChange={e => setName(e.target.value)} autoFocus />
+      </div>
+      <input className="input-field" placeholder="Description" value={desc} onChange={e => setDesc(e.target.value)} />
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>Color:</label>
+        <input type="color" value={color} onChange={e => setColor(e.target.value)} style={{ width: 32, height: 32, border: "none", borderRadius: 6, cursor: "pointer" }} />
+      </div>
+      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+        <button className="btn-secondary sm" onClick={onCancel}>Cancel</button>
+        <button className="btn-primary sm" onClick={onSubmit} disabled={!name.trim()}><Save size={12} /> {submitLabel}</button>
+      </div>
+    </div>
+  );
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
         <h2 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text)" }}>📎 Manage Phases</h2>
-        <button className="btn-primary sm" onClick={() => setShowAdd(true)}><Plus size={12} /> Add Phase</button>
+        <button className="btn-primary sm" onClick={() => { setShowAdd(true); setEditingId(null); setName(""); setDesc(""); setIcon("📚"); setColor("#6366f1"); }}><Plus size={12} /> Add Phase</button>
       </div>
       {[...curriculum.phases].sort((a, b) => a.order - b.order).map(phase => (
-        <div key={phase.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 10, border: "1px solid var(--border)", background: "var(--surface)", marginBottom: 6 }}>
-          <span style={{ fontSize: "1.2rem" }}>{phase.icon}</span>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>Phase {phase.id}: {phase.name}</p>
-            <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{(phase.dayIds ?? []).length} days • {phase.description}</p>
+        <div key={phase.id} style={{ marginBottom: 6, borderRadius: 10, border: `1px solid ${expandedId === phase.id ? (phase.color ?? "var(--brand)") : "var(--border)"}`, background: "var(--surface)", overflow: "hidden" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 12px" }}>
+            <button onClick={() => setExpandedId(expandedId === phase.id ? null : phase.id)} style={{ background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 10, flex: 1, fontFamily: "inherit", textAlign: "left" }}>
+              <span style={{ fontSize: "1.2rem" }}>{phase.icon}</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>Phase {phase.id}: {phase.name}</p>
+                <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{(phase.dayIds ?? []).length} days • {phase.description}</p>
+              </div>
+              <ChevronRight size={14} style={{ color: "var(--text-muted)", transition: "transform 0.2s", transform: expandedId === phase.id ? "rotate(90deg)" : "none" }} />
+            </button>
+            <div style={{ display: "flex", gap: 3 }}>
+              <button onClick={() => handleMove(phase.id, "up")} className="btn-icon" style={{ width: 26, height: 26 }}><ArrowUp size={11} /></button>
+              <button onClick={() => handleMove(phase.id, "down")} className="btn-icon" style={{ width: 26, height: 26 }}><ArrowDown size={11} /></button>
+              <button onClick={() => startEdit(phase)} className="btn-icon" style={{ width: 26, height: 26 }}><Edit3 size={11} /></button>
+              <button onClick={() => { if (confirm(`Delete Phase "${phase.name}" and remove all ${phase.dayIds?.length ?? 0} day assignments?`)) { onPhasesChange(curriculum.phases.filter(p => p.id !== phase.id)); } }} className="btn-icon" style={{ width: 26, height: 26, color: "var(--red)" }}><Trash2 size={11} /></button>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 3 }}>
-            <button onClick={() => handleMove(phase.id, "up")} className="btn-icon" style={{ width: 26, height: 26 }}><ArrowUp size={11} /></button>
-            <button onClick={() => handleMove(phase.id, "down")} className="btn-icon" style={{ width: 26, height: 26 }}><ArrowDown size={11} /></button>
-            <button onClick={() => { if (confirm(`Delete Phase ${phase.id}?`)) onPhasesChange(curriculum.phases.filter(p => p.id !== phase.id)); }} className="btn-icon" style={{ width: 26, height: 26, color: "var(--red)" }}><Trash2 size={11} /></button>
-          </div>
+          {expandedId === phase.id && (
+            <div style={{ padding: "8px 12px 12px", borderTop: "1px solid var(--border)", background: "var(--surface2)" }}>
+              <p style={{ fontSize: "0.72rem", fontWeight: 700, color: "var(--text-muted)", marginBottom: 6 }}>Days in this phase:</p>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+                {(phase.dayIds ?? []).sort((a, b) => a - b).map(d => (
+                  <span key={d} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 6, fontSize: "0.7rem", fontWeight: 600, background: `${phase.color ?? "var(--brand)"}15`, color: phase.color ?? "var(--brand)", border: `1px solid ${phase.color ?? "var(--brand)"}30` }}>
+                    Day {d}
+                    <button onClick={() => handleRemoveDayFromPhase(phase.id, d)} style={{ background: "none", border: "none", cursor: "pointer", color: "inherit", padding: 0, lineHeight: 1, opacity: 0.6 }} title="Remove day"><X size={10} /></button>
+                  </span>
+                ))}
+                {(phase.dayIds ?? []).length === 0 && <span style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>No days assigned</span>}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <input type="number" className="input-field" placeholder="Day #" value={newDayNum[phase.id] ?? ""} onChange={e => setNewDayNum(prev => ({ ...prev, [phase.id]: e.target.value }))} onKeyDown={e => e.key === "Enter" && handleAddDayToPhase(phase.id)} style={{ width: 80, fontSize: "0.78rem" }} min={1} />
+                <button className="btn-primary sm" onClick={() => handleAddDayToPhase(phase.id)} disabled={!newDayNum[phase.id]}><Plus size={12} /> Add Day</button>
+              </div>
+            </div>
+          )}
         </div>
       ))}
-      {showAdd && (
-        <div style={{ padding: 16, borderRadius: 12, border: "1.5px solid var(--brand)", background: "var(--surface)", display: "flex", flexDirection: "column", gap: 10 }}>
-          <p style={{ fontSize: "0.88rem", fontWeight: 700, color: "var(--text)" }}>Add New Phase</p>
-          <div style={{ display: "grid", gridTemplateColumns: "60px 1fr", gap: 8 }}>
-            <input className="input-field" placeholder="📚" value={icon} onChange={e => setIcon(e.target.value)} style={{ textAlign: "center" }} />
-            <input className="input-field" placeholder="Phase name" value={name} onChange={e => setName(e.target.value)} autoFocus />
+      {showAdd && renderForm(handleAdd, "Create", () => setShowAdd(false))}
+      {editingId !== null && renderForm(handleEdit, "Save Changes", () => { setEditingId(null); setName(""); setDesc(""); })}
+    </div>
+  );
+}
+
+// ── Student Progress Manager ──────────────────────────────────────────────
+function StudentProgressManager() {
+  const [students, setStudents] = useState<Array<{ id: string; name: string; currentDay: number; completedDays: number[]; xp: number; streak: number; testScores: Record<number, number> }>>([]);
+  const [loading, setLoading] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<string | null>(null);
+  const [editDay, setEditDay] = useState("");
+
+  const STUDENT_IDS = ["st_1", "st_2"];
+
+  const loadStudents = async () => {
+    setLoading(true);
+    try {
+      const { loadStateFromFirestore } = await import("@/lib/firebase-sync");
+      const results = await Promise.all(STUDENT_IDS.map(async (id) => {
+        try {
+          const state = await loadStateFromFirestore(id as any);
+          return { id, name: state?.name ?? id, currentDay: state?.currentDay ?? 0, completedDays: state?.completedDays ?? [], xp: state?.xp ?? 0, streak: state?.streak ?? 0, testScores: state?.testScores ?? {} };
+        } catch { return { id, name: id, currentDay: 0, completedDays: [] as number[], xp: 0, streak: 0, testScores: {} as Record<number, number> }; }
+      }));
+      setStudents(results.filter(s => s.name !== s.id || s.currentDay > 0 || s.completedDays.length > 0));
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  useEffect(() => { loadStudents(); }, []);
+
+  const handleSetDay = async (studentId: string, newDay: number) => {
+    try {
+      const { loadStateFromFirestore, syncStateToFirestore } = await import("@/lib/firebase-sync");
+      const state = await loadStateFromFirestore(studentId as any);
+      if (state) {
+        state.currentDay = newDay;
+        await syncStateToFirestore(studentId as any, state as any);
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, currentDay: newDay } : s));
+        setEditDay("");
+      }
+    } catch { /* ignore */ }
+  };
+
+  const handleResetStudent = async (studentId: string) => {
+    if (!confirm("Reset this student's progress to Day 1? This cannot be undone.")) return;
+    try {
+      const { loadStateFromFirestore, syncStateToFirestore } = await import("@/lib/firebase-sync");
+      const state = await loadStateFromFirestore(studentId as any);
+      if (state) {
+        state.currentDay = 1;
+        state.completedDays = [];
+        state.testScores = {};
+        state.xp = 0;
+        state.streak = 0;
+        state.weakTopics = [];
+        await syncStateToFirestore(studentId as any, state as any);
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, currentDay: 1, completedDays: [], testScores: {}, xp: 0, streak: 0 } : s));
+      }
+    } catch { /* ignore */ }
+  };
+
+  const sel = students.find(s => s.id === selectedStudent);
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <h2 style={{ fontSize: "1.05rem", fontWeight: 800, color: "var(--text)" }}>👤 Student Progress</h2>
+        <button className="btn-secondary sm" onClick={loadStudents} disabled={loading}><RefreshCw size={12} /> Refresh</button>
+      </div>
+      {students.length === 0 && !loading && (
+        <div style={{ padding: 24, textAlign: "center", color: "var(--text-muted)", fontSize: "0.82rem" }}>
+          <Users size={24} style={{ margin: "0 auto 8px", opacity: 0.4 }} />
+          <p>No students found. Students appear here after they log in.</p>
+        </div>
+      )}
+      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+        {students.map(s => (
+          <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 10, border: `1px solid ${selectedStudent === s.id ? "var(--brand)" : "var(--border)"}`, background: selectedStudent === s.id ? "rgba(99,102,241,0.04)" : "var(--surface)", cursor: "pointer" }} onClick={() => setSelectedStudent(selectedStudent === s.id ? null : s.id)}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: "linear-gradient(135deg, var(--brand), var(--brand2))", display: "flex", alignItems: "center", justifyContent: "center", color: "#fff", fontWeight: 800, fontSize: "0.78rem" }}>{s.name?.charAt(0)?.toUpperCase() ?? "?"}</div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)" }}>{s.name || s.id}</p>
+              <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>Day {s.currentDay} • {s.completedDays.length} completed • {s.xp} XP • 🔥{s.streak}</p>
+            </div>
+            <div style={{ display: "flex", gap: 4 }}>
+              <span style={{ fontSize: "0.65rem", padding: "2px 8px", borderRadius: 999, background: "rgba(99,102,241,0.1)", color: "var(--brand)", fontWeight: 600 }}>{s.id}</span>
+            </div>
           </div>
-          <input className="input-field" placeholder="Description" value={desc} onChange={e => setDesc(e.target.value)} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)" }}>Color:</label>
-            <input type="color" value={color} onChange={e => setColor(e.target.value)} style={{ width: 32, height: 32, border: "none", borderRadius: 6, cursor: "pointer" }} />
+        ))}
+      </div>
+      {sel && (
+        <div style={{ marginTop: 14, padding: 16, borderRadius: 12, border: "1.5px solid var(--brand)", background: "var(--surface)" }}>
+          <h3 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--text)", marginBottom: 10 }}>⚙️ Manage: {sel.name || sel.id}</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 12 }}>
+            <div style={{ padding: 10, borderRadius: 8, background: "var(--surface2)" }}>
+              <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600 }}>Current Day</p>
+              <p style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--brand)" }}>{sel.currentDay}</p>
+            </div>
+            <div style={{ padding: 10, borderRadius: 8, background: "var(--surface2)" }}>
+              <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600 }}>Completed</p>
+              <p style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--green)" }}>{sel.completedDays.length}</p>
+            </div>
+            <div style={{ padding: 10, borderRadius: 8, background: "var(--surface2)" }}>
+              <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600 }}>XP</p>
+              <p style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--cyan)" }}>{sel.xp}</p>
+            </div>
+            <div style={{ padding: 10, borderRadius: 8, background: "var(--surface2)" }}>
+              <p style={{ fontSize: "0.68rem", color: "var(--text-muted)", fontWeight: 600 }}>Streak</p>
+              <p style={{ fontSize: "1.1rem", fontWeight: 800, color: "var(--orange)" }}>🔥 {sel.streak}</p>
+            </div>
           </div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button className="btn-secondary sm" onClick={() => setShowAdd(false)}>Cancel</button>
-            <button className="btn-primary sm" onClick={handleAdd} disabled={!name.trim()}>Create</button>
+          <div style={{ marginBottom: 10 }}>
+            <p style={{ fontSize: "0.72rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 4 }}>Test Scores:</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+              {Object.entries(sel.testScores).sort(([a], [b]) => Number(a) - Number(b)).map(([day, score]) => (
+                <span key={day} style={{ fontSize: "0.65rem", padding: "2px 6px", borderRadius: 6, background: score >= 80 ? "rgba(16,185,129,0.12)" : score >= 60 ? "rgba(234,179,8,0.12)" : "rgba(239,68,68,0.12)", color: score >= 80 ? "var(--green)" : score >= 60 ? "#eab308" : "var(--red)", fontWeight: 600 }}>Day {day}: {score}%</span>
+              ))}
+              {Object.keys(sel.testScores).length === 0 && <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>No tests taken</span>}
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+              <input type="number" className="input-field" placeholder="Day #" value={editDay} onChange={e => setEditDay(e.target.value)} style={{ width: 70, fontSize: "0.78rem" }} min={1} max={210} />
+              <button className="btn-primary sm" onClick={() => { const d = parseInt(editDay, 10); if (d > 0) handleSetDay(sel.id, d); }} disabled={!editDay}>Set Day</button>
+            </div>
+            <button className="btn-secondary sm" style={{ color: "var(--red)", border: "1px solid rgba(239,68,68,0.3)" }} onClick={() => handleResetStudent(sel.id)}><RotateCcw size={12} /> Reset Progress</button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+// ── AI Journey Panel ──────────────────────────────────────────────────────
+function StudentJourneyPanel({ learner, onAskAi }: { learner: any; onAskAi: (prompt: string) => void }) {
+  const [recommendation, setRecommendation] = useState<string>("");
+  const [nextSteps, setNextSteps] = useState<Array<{ day: number; title: string; reason: string; priority: string }>>([]);
+  const [loading, setLoading] = useState(false);
+
+  const generateJourney = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/tutor", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "admin_journey_next",
+          studentProfile: { name: learner.name, profile: learner.profile, currentDay: learner.currentDay, completedDays: learner.completedDays, testScores: learner.testScores, weakTopics: learner.weakTopics, xp: learner.xp, streak: learner.streak },
+        }) });
+      if (res.ok) {
+        const data = await res.json();
+        setRecommendation(data.recommendation ?? "");
+        setNextSteps(data.nextSteps ?? []);
+      }
+    } catch { /* ignore */ }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ padding: 16, borderRadius: 12, border: "1.5px solid var(--brand)", background: "var(--surface)", marginTop: 14 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+        <h3 style={{ fontSize: "0.9rem", fontWeight: 700, color: "var(--text)" }}>🧠 AI Journey Recommendation</h3>
+        <button className="btn-primary sm" onClick={generateJourney} disabled={loading}>
+          {loading ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />} Generate
+        </button>
+      </div>
+      {recommendation && (
+        <div style={{ padding: 12, borderRadius: 8, background: "var(--surface2)", marginBottom: 10, fontSize: "0.82rem", color: "var(--text2)", lineHeight: 1.6, whiteSpace: "pre-wrap" }}>
+          {recommendation}
+        </div>
+      )}
+      {nextSteps.length > 0 && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+          {nextSteps.map((step, i) => (
+            <div key={i} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 12px", borderRadius: 8, background: "var(--surface2)", border: "1px solid var(--border)" }}>
+              <div style={{ width: 28, height: 28, borderRadius: 6, background: step.priority === "high" ? "rgba(239,68,68,0.12)" : step.priority === "medium" ? "rgba(234,179,8,0.12)" : "rgba(16,185,129,0.12)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: "0.72rem", fontWeight: 800, color: step.priority === "high" ? "var(--red)" : step.priority === "medium" ? "#eab308" : "var(--green)" }}>{i + 1}</div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: "0.78rem", fontWeight: 600, color: "var(--text)" }}>Day {step.day}: {step.title}</p>
+                <p style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>{step.reason}</p>
+              </div>
+              <button className="btn-secondary sm" onClick={() => onAskAi(`Help me understand Day ${step.day}: ${step.title}`)} style={{ fontSize: "0.7rem" }}>Ask AI</button>
+            </div>
+          ))}
+        </div>
+      )}
+      {!recommendation && !loading && (
+        <p style={{ fontSize: "0.78rem", color: "var(--text-muted)", textAlign: "center", padding: 12 }}>Click "Generate" to get AI-powered learning path recommendations based on the student's actual progress.</p>
       )}
     </div>
   );
@@ -667,7 +904,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
   const [selectedDay, setSelectedDay] = useState<number | null>(null);
   const [expandedPhase, setExpandedPhase] = useState<number | null>(1);
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeSection, setActiveSection] = useState<"days" | "phases" | "pipeline" | "generator" | "test" | "export">("days");
+  const [activeSection, setActiveSection] = useState<"days" | "phases" | "pipeline" | "generator" | "test" | "export" | "progress">("days");
   const [generatingCurriculum, setGeneratingCurriculum] = useState(false);
 
   // ── Model Test state (lifted here so it survives section switches) ──
@@ -854,6 +1091,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             { id: "days" as const, icon: <BookOpen size={15} />, label: "Days" },
             { id: "phases" as const, icon: <Layers size={15} />, label: "Phases" },
             { id: "pipeline" as const, icon: <Route size={15} />, label: "Pipeline" },
+            { id: "progress" as const, icon: <Users size={15} />, label: "Students" },
             { id: "generator" as const, icon: <Sparkles size={15} />, label: "AI Generator" },
             { id: "test" as const, icon: <TestTube2 size={15} />, label: "Model Test" },
             { id: "export" as const, icon: <Download size={15} />, label: "Import/Export" },
@@ -937,6 +1175,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
         )}
         {activeSection === "phases" && <div style={{ maxWidth: 800, margin: "0 auto" }}><PhaseManager curriculum={curriculum} onPhasesChange={(phases) => setCurriculum(prev => ({ ...prev, phases }))} /></div>}
         {activeSection === "pipeline" && <div style={{ maxWidth: 1100, margin: "0 auto" }}><PipelineView curriculum={curriculum} onSelectDay={(d) => { setSelectedDay(d); setActiveSection("days"); }} /></div>}
+        {activeSection === "progress" && <div style={{ maxWidth: 800, margin: "0 auto" }}><StudentProgressManager /></div>}
         {activeSection === "generator" && <div style={{ maxWidth: 600, margin: "0 auto" }}><CurriculumGenerator onGenerate={handleGenerateFullCurriculum} generating={generatingCurriculum} /></div>}
         {activeSection === "test" && <div style={{ maxWidth: 600, margin: "0 auto" }}><ModelTestPanel results={modelTestResults} testing={modelTestRunning} onTest={handleModelTest} modelSel={modelTestSel} onModelSel={setModelTestSel} promptText={modelTestPrompt} onPromptChange={setModelTestPrompt} /></div>}
         {activeSection === "export" && (
