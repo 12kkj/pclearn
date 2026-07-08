@@ -386,6 +386,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
   max-width: 900px;
   aspect-ratio: 16/9;
   overflow: hidden;
+  zoom: 0.8;
 }
 .dlv-iframe {
   position: absolute;
