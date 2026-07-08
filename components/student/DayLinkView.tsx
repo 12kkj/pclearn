@@ -350,13 +350,13 @@ export default function DayLinkView({
       <div style={{ flex: 1, display: "flex", overflow: "hidden", minHeight: 0, flexDirection: "row" }} className="player-layout">
 
         {/* ── Left: Player + Below Panel ───────────────────────────────── */}
-        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0 }} className="player-main">
+        <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", minWidth: 0, minHeight: 0, maxWidth: 850 }} className="player-main">
 
           {activeVideo >= 0 && currentVideo ? (
             <>
-              {/* ── Video Player (responsive, capped) ── */}
+              {/* ── Video Player (responsive) ── */}
               <div style={{ flexShrink: 0, background: "#000", position: "relative", width: "100%" }}>
-                <div style={{ position: "relative", width: "100%", height: "auto", aspectRatio: "16/9", maxHeight: "min(40vh, 320px)" }}>
+                <div style={{ position: "relative", width: "100%", height: "auto", aspectRatio: "16/9" }}>
                   <iframe
                     src={`https://www.youtube.com/embed/${currentVideoId}?autoplay=1&rel=0&modestbranding=1`}
                     title={currentVideo.title}
@@ -553,18 +553,18 @@ export default function DayLinkView({
         {/* ── Right: Playlist Sidebar ── */}
         {hasVideos && (
           <div className="playlist-sidebar" style={{
-            width: 240, flexShrink: 0, borderLeft: "1px solid var(--border)",
+            width: 280, flexShrink: 0, borderLeft: "1px solid var(--border)",
             background: "var(--surface)", display: "flex", flexDirection: "column", overflow: "hidden",
           }}>
             {/* Header */}
             <div style={{
-              padding: "8px 12px", borderBottom: "1px solid var(--border)",
+              padding: "10px 14px", borderBottom: "1px solid var(--border)",
               display: "flex", alignItems: "center", justifyContent: "space-between",
             }}>
-              <span style={{ fontSize: "0.75rem", fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center", gap: 4 }}>
-                <List size={12} /> Playlist
+              <span style={{ fontSize: "0.82rem", fontWeight: 700, color: "var(--text)", display: "flex", alignItems: "center", gap: 5 }}>
+                <List size={14} /> Playlist
               </span>
-              <span style={{ fontSize: "0.68rem", color: "var(--text-muted)" }}>
+              <span style={{ fontSize: "0.72rem", color: "var(--text-muted)" }}>
                 {watchedVideos.size}/{videoLinks.length}
               </span>
             </div>
@@ -575,11 +575,11 @@ export default function DayLinkView({
               {watchedVideos.size > 0 && (
                 <div>
                   <div style={{
-                    padding: "4px 12px", fontSize: "0.62rem", fontWeight: 700, color: "#10b981",
+                    padding: "5px 14px", fontSize: "0.65rem", fontWeight: 700, color: "#10b981",
                     textTransform: "uppercase" as const, letterSpacing: "0.05em",
-                    display: "flex", alignItems: "center", gap: 3,
+                    display: "flex", alignItems: "center", gap: 4,
                   }}>
-                    <CheckCircle2 size={10} /> Watched
+                    <CheckCircle2 size={11} /> Watched
                   </div>
                   {videoLinks.map((link, idx) => {
                     if (!watchedVideos.has(idx)) return null;
@@ -587,14 +587,14 @@ export default function DayLinkView({
                     return (
                       <div key={link.id} onClick={() => playVideo(idx)}
                         style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "5px 12px", cursor: "pointer",
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "7px 14px", cursor: "pointer",
                           borderBottom: "1px solid var(--border)", opacity: 0.6, transition: "opacity 0.15s",
                         }}
                         onMouseEnter={e => (e.currentTarget.style.opacity = "0.9")}
                         onMouseLeave={e => (e.currentTarget.style.opacity = "0.6")}>
                         <div style={{
-                          width: 44, height: 32, borderRadius: 4, overflow: "hidden", flexShrink: 0,
+                          width: 56, height: 40, borderRadius: 6, overflow: "hidden", flexShrink: 0,
                           position: "relative", background: "var(--surface3)",
                         }}>
                           {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
@@ -602,11 +602,11 @@ export default function DayLinkView({
                             position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
                             background: "rgba(16,185,129,0.4)",
                           }}>
-                            <CheckCircle2 size={11} color="#fff" />
+                            <CheckCircle2 size={12} color="#fff" />
                           </div>
                         </div>
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: "0.7rem", fontWeight: 500, color: "var(--text-muted)", lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          <p style={{ fontSize: "0.78rem", fontWeight: 500, color: "var(--text-muted)", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
                             {link.title}
                           </p>
                         </div>
@@ -620,11 +620,11 @@ export default function DayLinkView({
               <div>
                 {watchedVideos.size > 0 && (
                   <div style={{
-                    padding: "4px 12px", fontSize: "0.62rem", fontWeight: 700, color: "var(--text-muted)",
+                    padding: "5px 14px", fontSize: "0.65rem", fontWeight: 700, color: "var(--text-muted)",
                     textTransform: "uppercase" as const, letterSpacing: "0.05em",
-                    display: "flex", alignItems: "center", gap: 3,
+                    display: "flex", alignItems: "center", gap: 4,
                   }}>
-                    <Clock size={10} /> Up Next
+                    <Clock size={11} /> Up Next
                   </div>
                 )}
                 {videoLinks.map((link, idx) => {
@@ -634,8 +634,8 @@ export default function DayLinkView({
                   return (
                     <div key={link.id} onClick={() => playVideo(idx)}
                       style={{
-                        display: "flex", alignItems: "center", gap: 8,
-                        padding: "5px 12px", cursor: "pointer",
+                        display: "flex", alignItems: "center", gap: 10,
+                        padding: "7px 14px", cursor: "pointer",
                         background: isPlaying ? "rgba(239,68,68,0.08)" : "transparent",
                         borderLeft: isPlaying ? "3px solid #ef4444" : "3px solid transparent",
                         borderBottom: "1px solid var(--border)", transition: "all 0.15s",
@@ -643,7 +643,7 @@ export default function DayLinkView({
                       onMouseEnter={e => { if (!isPlaying) e.currentTarget.style.background = "var(--surface2)"; }}
                       onMouseLeave={e => { if (!isPlaying) e.currentTarget.style.background = "transparent"; }}>
                       <div style={{
-                        width: 52, height: 36, borderRadius: 6, overflow: "hidden", flexShrink: 0,
+                        width: 56, height: 40, borderRadius: 6, overflow: "hidden", flexShrink: 0,
                         position: "relative", background: "var(--surface3)",
                       }}>
                         {thumb && <img src={thumb} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />}
@@ -658,17 +658,17 @@ export default function DayLinkView({
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{
-                          fontSize: "0.75rem", fontWeight: isPlaying ? 700 : 500,
+                          fontSize: "0.78rem", fontWeight: isPlaying ? 700 : 500,
                           color: isPlaying ? "var(--text)" : "var(--text2)",
-                          lineHeight: 1.2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+                          lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                         }}>{link.title}</p>
                         {link.channelName && (
-                          <p style={{ fontSize: "0.65rem", color: "var(--text-faint)", marginTop: 2 }}>{link.channelName}</p>
+                          <p style={{ fontSize: "0.68rem", color: "var(--text-faint)", marginTop: 2 }}>{link.channelName}</p>
                         )}
                       </div>
                       <span style={{
-                        fontSize: "0.68rem", fontWeight: 700, color: isPlaying ? "#ef4444" : "var(--text-faint)",
-                        flexShrink: 0, width: 16, textAlign: "center",
+                        fontSize: "0.72rem", fontWeight: 700, color: isPlaying ? "#ef4444" : "var(--text-faint)",
+                        flexShrink: 0, width: 18, textAlign: "center",
                       }}>{idx + 1}</span>
                     </div>
                   );

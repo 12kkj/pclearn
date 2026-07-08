@@ -2,35 +2,6 @@
 
 /* ─── Design Tokens (Dark Mode Only) ────────────────────────────── */
 :root, .dark {
-  --bg:           #0f172a;
-  --bg2:          #1e293b;
-  --surface:      #1e293b;
-  --surface2:     #1e2030;
-  --surface3:     #334155;
-  --border:       #334155;
-  --border2:      #475569;
-  --text:         #f1f5f9;
-  --text2:        #cbd5e1;
-  --text-muted:   #94a3b8;
-  --text-faint:   #64748b;
-  --brand:        #6366f1;
-  --brand2:       #818cf8;
-  --csa-primary:  #6366f1;
-  --brand-glow:   rgba(99,102,241,0.25);
-  --green:        #10b981;
-  --red:          #ef4444;
-  --amber:        #f59e0b;
-  --cyan:         #06b6d4;
-  --pink:         #ec4899;
-  --shadow-sm:    0 1px 3px rgba(0,0,0,0.3);
-  --shadow:       0 4px 16px rgba(0,0,0,0.3), 0 1px 4px rgba(0,0,0,0.2);
-  --shadow-lg:    0 8px 32px rgba(0,0,0,0.4), 0 2px 8px rgba(0,0,0,0.2);
-  --radius:       16px;
-  --radius-sm:    10px;
-  --radius-xs:    6px;
-}
-
-.dark {
   --bg:           #0d0e1a;
   --bg2:          #111220;
   --surface:      #161728;
@@ -54,6 +25,9 @@
   --shadow-sm:    0 1px 3px rgba(0,0,0,0.3);
   --shadow:       0 4px 16px rgba(0,0,0,0.35);
   --shadow-lg:    0 8px 32px rgba(0,0,0,0.45);
+  --radius:       16px;
+  --radius-sm:    10px;
+  --radius-xs:    6px;
 }
 
 /* ─── Reset / Base ────────────────────────────────────────────── */
@@ -311,11 +285,16 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 @media (max-width: 768px) {
   .playlist-sidebar { display: none !important; }
   .player-layout { flex-direction: column !important; }
-  .player-main { width: 100% !important; }
+  .player-main { width: 100% !important; max-width: none !important; }
 }
-@media (min-width: 769px) {
-  .playlist-sidebar { display: flex !important; }
+@media (min-width: 769px) and (max-width: 1100px) {
+  .playlist-sidebar { display: flex !important; width: 240px !important; }
   .player-layout { flex-direction: row !important; }
+  .player-main { max-width: none !important; }
+}
+@media (min-width: 1101px) {
+  .playlist-sidebar { display: flex !important; }
+  .player-layout { flex-direction: row !important; justify-content: center; }
 }
 
 @media (max-width: 768px) {
