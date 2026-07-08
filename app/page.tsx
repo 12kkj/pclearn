@@ -1626,6 +1626,14 @@ export default function Home() {
     }
   }, [hydrated]); // only on mount
 
+  // Sync URL with current day so browser bar shows ?day=X
+  React.useEffect(() => {
+    if (!hydrated || !currentLessonDay) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set("day", String(currentLessonDay));
+    window.history.replaceState({}, "", url.toString());
+  }, [hydrated, currentLessonDay]);
+
   React.useEffect(() => {
     if (!hydrated || !currentLessonDay) return;
     const saved = learner.lessonContextByDay?.[currentLessonDay] ?? "";

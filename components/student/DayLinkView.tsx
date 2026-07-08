@@ -570,10 +570,6 @@ export default function DayLinkView({
                         <span>Next</span> <SkipForward size={15} />
                       </button>
                     )}
-                    <a href={`https://pclearn.vercel.app/?day=${day}`} target="_blank" rel="noopener noreferrer"
-                      className="dlv-fullscreen-btn">
-                      <Maximize2 size={14} /> <span>Full Page</span>
-                    </a>
                   </div>
 
                   <div className="dlv-divider" />
