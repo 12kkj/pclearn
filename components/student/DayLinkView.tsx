@@ -421,7 +421,6 @@ export default function DayLinkView({
         videoId: currentVideoId,
         playerVars: {
           autoplay: 1, rel: 0, modestbranding: 1,
-          controls: 0, iv_load_policy: 3, disablekb: 1, playsinline: 1,
           start: videoStartTime > 0 ? videoStartTime : undefined,
         },
         events: {
@@ -433,23 +432,6 @@ export default function DayLinkView({
               if (videoStartTime > 0) {
                 setTimeout(() => { try { player.seekTo(videoStartTime, true); } catch {} }, 500);
               }
-              // Inject CSS to hide YouTube endscreen / "More videos" overlay
-              try {
-                const iframe = containerEl.querySelector("iframe");
-                if (iframe?.contentDocument) {
-                  const style = iframe.contentDocument.createElement("style");
-                  style.textContent = `
-                    .ytp-endscreen-content, .ytp-endscreen { display: none !important; }
-                    .ytp-cardsrenderer, .ytp-cued-thumbnail-overlay { display: none !important; }
-                    .ytp-ce-element { display: none !important; }
-                    .ytp-pause-overlay { display: none !important; }
-                    .ytp-related-videos { display: none !important; }
-                    .ytmFullscreenRelatedVideosEntryPointViewModelHost { display: none !important; }
-                    .fullscreen-watch-next-entrypoint-wrapper { display: none !important; }
-                  `;
-                  iframe.contentDocument.head.appendChild(style);
-                }
-              } catch { /* cross-origin — will rely on playerParams */ }
             } catch {}
           },
           onStateChange: (e: any) => {
