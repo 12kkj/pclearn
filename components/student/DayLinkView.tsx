@@ -301,6 +301,7 @@ export default function DayLinkView({
 }: Props) {
   const [activeVideo, setActiveVideo] = useState<number>(-1);
   const [watchedVideos, setWatchedVideos] = useState<Set<number>>(new Set());
+  const [videoCompleted, setVideoCompleted] = useState(false);
   const [rightTab, setRightTab] = useState<"playlist" | "ai" | "quiz">("playlist");
   const [currentTranscript, setCurrentTranscript] = useState("");
   const [videoTranscriptFull, setVideoTranscriptFull] = useState("");
@@ -316,6 +317,21 @@ export default function DayLinkView({
   const timeIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [sidebarWidth, setSidebarWidth] = useState(380);
   const dragRef = useRef<{ startX: number; startW: number } | null>(null);
+
+  // ── Advance to next video (or complete) — extracted so timer & closeTrigger share it ──
+  const advanceVideoRef = useRef<() => void>(() => {});
+  advanceVideoRef.current = () => {
+    if (activeVideo < 0) return;
+    setWatchedVideos(prev => new Set([...prev, activeVideo]));
+    if (activeVideo < videoLinks.length - 1) {
+      setActiveVideo(activeVideo + 1);
+    } else {
+      setActiveVideo(-1);
+      setVideoCompleted(true);
+      setRightTab("quiz");
+      onLoadQuiz();
+    }
+  };
 
   const onDragStart = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
@@ -362,11 +378,7 @@ export default function DayLinkView({
   // Advance on external close
   useEffect(() => {
     if (videoCloseTrigger === 0) return;
-    if (activeVideo >= 0) {
-      setWatchedVideos(prev => new Set([...prev, activeVideo]));
-      if (activeVideo < videoLinks.length - 1) setActiveVideo(activeVideo + 1);
-      else { setActiveVideo(-1); setRightTab("quiz"); onLoadQuiz(); }
-    }
+    advanceVideoRef.current();
   }, [videoCloseTrigger]); // eslint-disable-line
 
   // Load YouTube IFrame API
@@ -432,12 +444,17 @@ export default function DayLinkView({
                   const d = player.getDuration();
                   if (typeof t === "number" && t >= 0) setCurrentVideoTime(t);
                   if (typeof d === "number" && d > 0) setVideoDuration(d);
-                  // Auto-pause at end time (transparent to student)
+                  // Auto-advance at end time — same behavior as natural video end
                   if (videoEndTime > 0 && typeof t === "number" && t >= videoEndTime) {
-                    player.pauseVideo();
+                    player.stopVideo();
+                    advanceVideoRef.current();
                   }
                 } catch {}
               }, 1000);
+            } else if (e.data === YT2?.PlayerState?.ENDED) {
+              // Natural video end — advance to next or show completion
+              if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
+              advanceVideoRef.current();
             } else {
               if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
               try {
@@ -547,7 +564,7 @@ export default function DayLinkView({
     if (onClearHistory) onClearHistory();
   }, [activeVideo, onClearHistory]);
 
-  const startPlaylist = useCallback(() => { setWatchedVideos(new Set()); playVideo(0); }, [playVideo]);
+  const startPlaylist = useCallback(() => { setWatchedVideos(new Set()); setVideoCompleted(false); playVideo(0); }, [playVideo]);
   const skipVideo = useCallback(() => { if (activeVideo < videoLinks.length - 1) playVideo(activeVideo + 1); }, [activeVideo, videoLinks.length, playVideo]);
   const prevVideo = useCallback(() => { if (activeVideo > 0) playVideo(activeVideo - 1); }, [activeVideo, playVideo]);
 
@@ -685,7 +702,32 @@ export default function DayLinkView({
           ) : (
             /* ── No video playing ── */
             <div className="dlv-no-video">
-              {hasVideos ? (
+              {videoCompleted ? (
+                /* ── All videos completed ── */
+                <div style={{ textAlign: "center", padding: "30px 20px" }}>
+                  <div style={{ fontSize: "3.5rem", marginBottom: 16 }}>🎉</div>
+                  <h3 style={{ fontSize: "1.2rem", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
+                    Videos Completed!
+                  </h3>
+                  <p style={{ fontSize: "0.88rem", color: "var(--text-muted)", marginBottom: 24, maxWidth: 340, margin: "0 auto 24px" }}>
+                    You've watched all {videoLinks.length} videos for Day {day}. Ready for the next step?
+                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}>
+                    <button onClick={() => { setVideoCompleted(false); setRightTab("quiz"); onLoadQuiz(); }}
+                      className="dlv-play-all-btn" style={{ width: "100%", maxWidth: 280 }}>
+                      <ListChecks size={18} /> Take the Quiz
+                    </button>
+                    <button onClick={() => { setVideoCompleted(false); onStartDay(day + 1); }}
+                      className="dlv-play-all-btn" style={{ width: "100%", maxWidth: 280, background: "var(--brand)", opacity: 0.85 }}>
+                      <ArrowRight size={18} /> Next Day (Day {day + 1})
+                    </button>
+                    <button onClick={() => { setVideoCompleted(false); startPlaylist(); }}
+                      style={{ background: "none", border: "none", color: "var(--text-muted)", fontSize: "0.82rem", cursor: "pointer", padding: "8px 16px", display: "flex", alignItems: "center", gap: 4 }}>
+                      <RotateCcw size={14} /> Rewatch Videos
+                    </button>
+                  </div>
+                </div>
+              ) : hasVideos ? (
                 <>
                   <div className="dlv-no-video-thumb">
                     {getThumbnailHq(videoLinks[0].url) ? (
