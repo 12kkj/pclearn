@@ -53,7 +53,54 @@ interface Props {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function getVideoId(url: string): string {
-  try { return new URL(url).searchParams.get("v") ?? ""; } catch { return ""; }
+  // Handle youtu.be/XXXX format
+  const shortMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  if (shortMatch) return shortMatch[1];
+  // Handle youtube.com/watch?v=XXXX format
+  try {
+    const u = new URL(url);
+    const v = u.searchParams.get("v");
+    if (v) return v;
+  } catch {}
+  // Handle bare 11-char ID
+  const bare = url.match(/^([a-zA-Z0-9_-]{11})$/);
+  return bare ? bare[1] : "";
+}
+/** Extract start time from URL (?t=126, ?t=2m6s, ?start=126) or return 0 */
+function getStartTimeFromUrl(url: string): number {
+  try {
+    const u = new URL(url);
+    const t = u.searchParams.get("t") ?? u.searchParams.get("start");
+    if (!t) return 0;
+    // Handle "2m6s" format
+    if (t.includes("m") || t.includes("s")) {
+      let secs = 0;
+      const m = t.match(/(\d+)m/);
+      const s = t.match(/(\d+)s/);
+      if (m) secs += parseInt(m[1]) * 60;
+      if (s) secs += parseInt(s[1]);
+      return secs;
+    }
+    return parseInt(t) || 0;
+  } catch { return 0; }
+}
+/** Parse "MM:SS" or "HH:MM:SS" or raw seconds to total seconds */
+function parseTimeString(v: string): number {
+  if (!v.trim()) return 0;
+  if (/^\d+$/.test(v.trim())) return parseInt(v.trim());
+  const parts = v.trim().split(":").map(Number);
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return 0;
+}
+/** Format seconds to MM:SS or HH:MM:SS */
+function formatTime(secs: number): string {
+  if (secs <= 0) return "";
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = Math.floor(secs % 60);
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 function getThumbnail(url: string): string {
   const id = getVideoId(url);
@@ -299,6 +346,8 @@ export default function DayLinkView({
   const hasVideos = videoLinks.length > 0;
   const currentVideo = activeVideo >= 0 ? videoLinks[activeVideo] : null;
   const currentVideoId = currentVideo ? getVideoId(currentVideo.url) : "";
+  // Compute effective end time for display (admin-set or URL-embedded)
+  const effectiveEndTime = currentVideo?.endTime ?? 0;
 
   // Auto-load quiz in quiz-only mode
   useEffect(() => { if (quizOnly && !quiz && !quizLoading) onLoadQuiz(); }, [quizOnly]); // eslint-disable-line
@@ -353,14 +402,24 @@ export default function DayLinkView({
         return;
       }
 
+      const videoStartTime = currentVideo?.startTime ?? getStartTimeFromUrl(currentVideo?.url ?? "");
+      const videoEndTime = currentVideo?.endTime ?? 0;
+
       const player = new YT.Player(containerEl, {
         videoId: currentVideoId,
-        playerVars: { autoplay: 1, rel: 0, modestbranding: 1 },
+        playerVars: {
+          autoplay: 1, rel: 0, modestbranding: 1,
+          start: videoStartTime > 0 ? videoStartTime : undefined,
+        },
         events: {
           onReady: () => {
             try {
               const dur = player.getDuration();
               if (dur > 0) setVideoDuration(dur);
+              // Seek to start time if set (extra safety for API delay)
+              if (videoStartTime > 0) {
+                setTimeout(() => { try { player.seekTo(videoStartTime, true); } catch {} }, 500);
+              }
             } catch {}
           },
           onStateChange: (e: any) => {
@@ -373,8 +432,12 @@ export default function DayLinkView({
                   const d = player.getDuration();
                   if (typeof t === "number" && t >= 0) setCurrentVideoTime(t);
                   if (typeof d === "number" && d > 0) setVideoDuration(d);
+                  // Auto-pause at end time (transparent to student)
+                  if (videoEndTime > 0 && typeof t === "number" && t >= videoEndTime) {
+                    player.pauseVideo();
+                  }
                 } catch {}
-              }, 2000);
+              }, 1000);
             } else {
               if (timeIntervalRef.current) clearInterval(timeIntervalRef.current);
               try {
@@ -396,6 +459,8 @@ export default function DayLinkView({
       if (ytPlayerRef.current) { try { ytPlayerRef.current.destroy(); } catch {} ytPlayerRef.current = null; }
     };
   }, [currentVideoId, activeVideo]);
+  // Stop tracking interval on unmount
+  useEffect(() => { return () => { if (timeIntervalRef.current) clearInterval(timeIntervalRef.current); }; }, []);
 
   // Load transcript via Cloudflare Worker + pre-fetch next video
   useEffect(() => {

@@ -96,6 +96,15 @@ function extractYouTubeId(url: string): string | null {
   const m = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
   return m ? m[1] : (url.match(/^([a-zA-Z0-9_-]{11})$/) ? url : null);
 }
+/** Parse "MM:SS" or "HH:MM:SS" or raw seconds to total seconds */
+function parseAdminTime(v: string): number {
+  if (!v.trim()) return 0;
+  if (/^\d+$/.test(v.trim())) return parseInt(v.trim());
+  const parts = v.trim().split(":").map(Number);
+  if (parts.length === 2) return parts[0] * 60 + parts[1];
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+  return 0;
+}
 
 function pipeColor(s: AdminPipelineStatus): string { return PIPELINE_STAGES.find(x => x.key === s)?.color ?? "#6b7280"; }
 function nextPipe(s: AdminPipelineStatus): AdminPipelineStatus {
@@ -113,6 +122,30 @@ function ResourceLinkEditor({ resource, onSave, onDelete, onCancel }: {
   const [description, setDescription] = useState(resource?.description ?? "");
   const [type, setType] = useState<"youtube" | "blog" | "web">(resource?.type ?? "youtube");
   const [autoFilling, setAutoFilling] = useState(false);
+  const [startTime, setStartTime] = useState(resource?.startTime != null ? String(resource.startTime) : "");
+  const [endTime, setEndTime] = useState(resource?.endTime != null ? String(resource.endTime) : "");
+
+  // When URL changes and has ?t=, auto-fill startTime if empty
+  useEffect(() => {
+    if (type !== "youtube" || resource) return;
+    try {
+      const u = new URL(url);
+      const t = u.searchParams.get("t") ?? u.searchParams.get("start");
+      if (t && !startTime) {
+        // Parse "2m6s" or raw seconds
+        if (t.includes("m") || t.includes("s")) {
+          let secs = 0;
+          const mMatch = t.match(/(\d+)m/);
+          const sMatch = t.match(/(\d+)s/);
+          if (mMatch) secs += parseInt(mMatch[1]) * 60;
+          if (sMatch) secs += parseInt(sMatch[1]);
+          setStartTime(String(secs));
+        } else {
+          setStartTime(t);
+        }
+      }
+    } catch {}
+  }, [url, type]);
 
   useEffect(() => {
     if (!resource) {
@@ -148,6 +181,8 @@ function ResourceLinkEditor({ resource, onSave, onDelete, onCancel }: {
       description: description.trim(),
       thumbnailUrl: ytId ? `https://img.youtube.com/vi/${ytId}/hqdefault.jpg` : undefined,
       addedAt: resource?.addedAt ?? new Date().toISOString(),
+      startTime: type === "youtube" && startTime.trim() ? parseAdminTime(startTime) : undefined,
+      endTime: type === "youtube" && endTime.trim() ? parseAdminTime(endTime) : undefined,
     });
   };
 
@@ -177,6 +212,18 @@ function ResourceLinkEditor({ resource, onSave, onDelete, onCancel }: {
       </div>
       <input type="text" className="input-field" placeholder="Resource title" value={title} onChange={e => setTitle(e.target.value)} />
       <input type="text" className="input-field" placeholder="Short description (optional)" value={description} onChange={e => setDescription(e.target.value)} />
+      {type === "youtube" && (
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 2, display: "block" }}>⏱ Start Time</label>
+            <input type="text" className="input-field" placeholder="0:00 or 126" value={startTime} onChange={e => setStartTime(e.target.value)} style={{ fontSize: "0.78rem" }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label style={{ fontSize: "0.7rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: 2, display: "block" }}>⏹ Stop Time</label>
+            <input type="text" className="input-field" placeholder="Leave empty = play full" value={endTime} onChange={e => setEndTime(e.target.value)} style={{ fontSize: "0.78rem" }} />
+          </div>
+        </div>
+      )}
       {url && type === "youtube" && extractYouTubeId(url) && (
         <div style={{ display: "flex", gap: 10, alignItems: "center", padding: 8, borderRadius: 8, background: "var(--surface)", border: "1px solid var(--border)" }}>
           <img src={`https://img.youtube.com/vi/${extractYouTubeId(url)}/hqdefault.jpg`} alt="" style={{ width: 80, height: 45, borderRadius: 6, objectFit: "cover" }} />
@@ -423,6 +470,12 @@ function DayContentEditor({ day, existing, curriculum, onSave, onClose }: {
                     <p style={{ fontSize: "0.7rem", color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.url}</p>
                   </div>
                   <span className={`badge ${r.type === "youtube" ? "badge-red" : r.type === "blog" ? "badge-purple" : "badge-cyan"}`}>{r.type}</span>
+                  {r.type === "youtube" && ((r.startTime ?? 0) > 0 || (r.endTime ?? 0) > 0) && (
+                    <span className="badge badge-cyan" style={{ fontSize: "0.65rem" }}>
+                      ⏱ {(r.startTime ?? 0) > 0 ? `${Math.floor((r.startTime ?? 0)/60)}:${String((r.startTime ?? 0)%60).padStart(2,"0")}` : "0:00"}
+                      {(r.endTime ?? 0) > 0 ? ` → ${Math.floor((r.endTime ?? 0)/60)}:${String((r.endTime ?? 0)%60).padStart(2,"0")}` : " → end"}
+                    </span>
+                  )}
                   <Edit3 size={12} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
                 </div>
               )}

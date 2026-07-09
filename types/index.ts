@@ -72,6 +72,8 @@ export interface AdminResourceLink {
   thumbnailUrl?: string;
   channelName?: string;
   addedAt: string; // ISO date
+  startTime?: number; // seconds — video starts playing from this point
+  endTime?: number;   // seconds — video auto-pauses at this point
 }
 
 /** Admin-managed content for a specific day */

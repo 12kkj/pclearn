@@ -823,10 +823,8 @@ async function handleVideoJumpTo(body: TutorApiRequest) {
 // It provides read-only access to view any student's data for 1 hour.
 
 async function handleAdminAction(body: TutorApiRequest) {
-  const { studentId, adminAction } = body as TutorApiRequest & {
-    studentId?: string;
-    adminAction?: string;
-  };
+  const { studentId } = body;
+  const adminAction = body.adminAction as string | undefined;
 
   if (!adminAction) {
     return NextResponse.json({ error: "adminAction is required" }, { status: 400 });
